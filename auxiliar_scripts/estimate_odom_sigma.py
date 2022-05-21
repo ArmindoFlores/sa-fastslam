@@ -22,7 +22,7 @@ def main():
         xy_estimates[i] = np.array([pos["x"], pos["y"]])
 
     variance = np.std(xy_estimates, axis=0) ** 2
-    print(f"variance = {variance * 1000} mm")
+    print(f"The variance estimation is \u03C3\u00b2 = {variance * 1e6} mm\u00b2")
     
     
 if __name__ == "__main__":
