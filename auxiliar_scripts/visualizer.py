@@ -2,6 +2,9 @@ import os
 import pickle
 import random
 import sys
+import time
+import cProfile, pstats, io
+from pstats import SortKey
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,64 +22,83 @@ def to_cartesian(theta, r):
     else:
         return 500 * np.cos(theta), 500 * np.sin(theta)
 
-def line_distance(x, y, m, b):
-    return abs(m * x - y + b) / np.sqrt(m**2 + 1)
-
 def closest_to_line(x, y, m, b):
     return (((x + m * y) - m * b) / (m**2 + 1), (m * (x + m * y) + b) / (m**2 + 1))
 
-def extract_features(ls, N=500, C=15, X=0.01, D=15):
+def extract_features(ls, N=400, C=20, X=0.02, D=9):
     features = []
     D = int(round(np.radians(D) / ls["angle_increment"])) 
     S = 6
-    # padded = ls["ranges"][-D:] + ls["ranges"] + ls["ranges"][:D]
-    cartesian = tuple((to_cartesian(ls["angle_min"] + i * ls["angle_increment"], r) for i, r in enumerate(ls["ranges"])))
-    available = [i for i in range(len(ls["ranges"])) if ls["ranges"][i] > 0.001]
+    rsize = len(ls["ranges"])
+    cartesian = tuple(to_cartesian(ls["angle_min"] + i * ls["angle_increment"], r) for i, r in enumerate(ls["ranges"]))
+    available = [i for i in range(rsize) if ls["ranges"][i] > 0.001]
+    
+    # Pre-allocate lists
+    total = [None] * 360
+    total_size = 0
+    cartesian_sample_x = [0] * 360
+    cartesian_sample_y = [0] * 360
+    cartesian_sample_size = 0
+    close_enough = [None] * 360
+    close_enough_size = 0
+    
     n = 0
-    while n < N and len(available) and len(ls["ranges"]) > C:
-        # print("n", n, "a", len(available))
+    while n < N and len(available) and rsize > C:
         n += 1
         
         # Select a random reading
         R = random.choice(available)
         
         # Sample S readings withn D degrees of R
-        total = [(i, ls["ranges"][i]) for i in available if (R - i) % len(ls["ranges"]) <= D]
-        if len(total) < S:
+        total_size = 0
+        for i in available:
+            if (R - i) % rsize <= D:
+                total[total_size] = i
+                total_size += 1
+        
+        if total_size < S:
             continue
-        sample = random.sample(total, S)
-        sample += [(R, ls["ranges"][R])]
+        sample = random.sample(total[:total_size], S)
+        sample.append(R)
         
         # Transform these points to cartesian coordinates and compute a least squares best fit line
-        cartesian_sample = [cartesian[(i - D) % len(ls["ranges"])] for i, _ in sample]
-        A = np.vstack([[x for x, _ in cartesian_sample], np.ones(len(cartesian_sample))]).T
-        m, b = np.linalg.lstsq(A, np.array([y for _, y in cartesian_sample]), rcond=None)[0]
+        cartesian_sample_size = 0
+        for i in sample:
+            x, y = cartesian[(i - D) % rsize]
+            cartesian_sample_x[cartesian_sample_size] = x
+            cartesian_sample_y[cartesian_sample_size] = y
+            cartesian_sample_size += 1
+            
+        A = np.vstack([cartesian_sample_x[:cartesian_sample_size], np.ones(cartesian_sample_size)]).T
+        m, b = np.linalg.lstsq(A, cartesian_sample_y[:cartesian_sample_size], rcond=None)[0]
         
         # Find all readings within X meters of the line
-        close_enough = []
-        for i, point in enumerate(cartesian):
-            if line_distance(*point, m, b) < X:
-                close_enough.append(i)
+        d = 1 / pow(m*m + 1, 0.5)
+        close_enough_size = 0
+        for i, (x, y) in enumerate(cartesian):
+            if abs(m * x - y + b) * d < X:
+                close_enough[close_enough_size] = i
+                close_enough_size += 1
         
         # If the number of points close to the line is above a threshold C
-        if len(close_enough) > C:
+        if close_enough_size > C:
             # Calculate new least squares best fit line
-            A = np.vstack([[cartesian[i][0] for i in close_enough], np.ones(len(close_enough))]).T
-            m, b = np.linalg.lstsq(A, np.array([cartesian[i][1] for i in close_enough]), rcond=None)[0]
+            A = np.vstack([[cartesian[i][0] for i in close_enough[:close_enough_size]], np.ones(close_enough_size)]).T
+            m, b = np.linalg.lstsq(A, np.array([cartesian[i][1] for i in close_enough[:close_enough_size]]), rcond=None)[0]
             
-            line_points = sorted((closest_to_line(*cartesian[i], m, b) for i in close_enough), key=lambda i: i[0])
+            line_points = sorted((closest_to_line(*cartesian[i], m, b) for i in close_enough[:close_enough_size]), key=lambda i: i[0])
             features.append((m, b, (line_points[0], line_points[-1])))
             
-            for point in close_enough:
+            for point in close_enough[:close_enough_size]:
                 try:
                     available.remove(point)
                 except ValueError:
-                    pass           
+                    pass
     return features
         
 
 def main(t="ls", save=False):
-    if t == "ls": scans = loader.from_dir(SCANS_DIR, "ls")[100:]
+    if t == "ls": scans = loader.from_dir(SCANS_DIR, "ls")
     else: odoms = loader.from_dir(ODOM_DIR, "odom")
     
     n = 0
@@ -97,7 +119,10 @@ def main(t="ls", save=False):
                 x, y = round(r * np.cos(theta) * scale_factor + offset[0]), round(r * np.sin(theta) * scale_factor + offset[1])
                 img[int(y)][int(x)] = 0
             
+            start_time = time.time()
             features = extract_features(scan_info)
+            end_time = time.time()
+            print(f"Time taken: {round((end_time - start_time) * 1000, 2)}ms")
             landmarks = []
             for m, b, (start, end) in features:
                 start, end = np.array(start), np.array(end)
@@ -119,15 +144,14 @@ def main(t="ls", save=False):
             plt.imshow(img, cmap="gray", interpolation="nearest")#, extent=(-3, 3, -3, 3))
             plt.xlim([0, img.shape[0]])
             plt.ylim([0, img.shape[1]])
-            # plt.plot(0, 0, "ro")
+            plt.plot(0, 0, "ro")
             
             if save:
                 plt.savefig(f"output/ls{str(n+1).zfill(3)}.png")
             else:
                 m = n+100
                 plt.title(str(m))
-                plt.pause(0.1)
-                # plt.show()
+                plt.pause(0.05)
             plt.clf()
             n += 1
     else:
