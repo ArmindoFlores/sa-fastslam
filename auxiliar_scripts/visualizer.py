@@ -8,7 +8,7 @@ import numpy as np
 
 import loader
 
-SAMPLE = "salalab-16-maio"
+SAMPLE = "corredor-16-maio"
 SCANS_DIR = os.path.join("laser-scans", SAMPLE)
 ODOM_DIR = os.path.join("odometry", SAMPLE)
 
@@ -76,7 +76,7 @@ def extract_features(ls, N=500, C=15, X=0.01, D=15):
         
 
 def main(t="ls", save=False):
-    if t == "ls": scans = loader.from_dir(SCANS_DIR, "ls")[150:]
+    if t == "ls": scans = loader.from_dir(SCANS_DIR, "ls")[100:]
     else: odoms = loader.from_dir(ODOM_DIR, "odom")
     
     n = 0
@@ -118,6 +118,8 @@ def main(t="ls", save=False):
             if save:
                 plt.savefig(f"output/ls{str(n+1).zfill(3)}.png")
             else:
+                m = n+100
+                plt.title(str(m))
                 plt.pause(0.1)
                 # plt.show()
             plt.clf()
