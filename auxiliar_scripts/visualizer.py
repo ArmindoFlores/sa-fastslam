@@ -71,7 +71,7 @@ def extract_features(ls, N=500, C=15, X=0.01, D=15):
                 try:
                     available.remove(point)
                 except ValueError:
-                    pass
+                    pass           
     return features
         
 
@@ -100,6 +100,9 @@ def main(t="ls", save=False):
             features = extract_features(scan_info)
             landmarks = []
             for m, b, (start, end) in features:
+                start, end = np.array(start), np.array(end)
+                start = start * scale_factor + offset
+                end = end * scale_factor + offset
                 landmark_pos = np.array(closest_to_line(0, 0, m, b))
                 
                 isnew = True
@@ -110,9 +113,12 @@ def main(t="ls", save=False):
                     
                 if isnew:
                     landmarks.append(landmark_pos)
+                    plt.plot([start[0], end[0]], [start[1], end[1]], "r")
                     plt.plot(*(landmark_pos * scale_factor + offset), "bo")
                     
             plt.imshow(img, cmap="gray", interpolation="nearest")#, extent=(-3, 3, -3, 3))
+            plt.xlim([0, img.shape[0]])
+            plt.ylim([0, img.shape[1]])
             # plt.plot(0, 0, "ro")
             
             if save:
