@@ -15,6 +15,20 @@ ODOM_DIR = os.path.join("odometry", SAMPLE)
 REAL_LANDMARK_THRESHOLD = 6
 
 
+def transform_landmark(landmark, position, rotmat):
+    start = position[:2] + np.dot(rotmat, -landmark.start)
+    end =  position[:2] + np.dot(rotmat, -landmark.end)
+    v = end - start    
+    if v[0] != 0:
+        a = v[1] / v[0]
+        b = -1
+        c = start[1] - a * start[0]
+    else:
+        a = -1
+        b = v[0] / v[1]
+        c = start[0] - b * start[1]
+    return landmark_extractor.Landmark(a, b, c, start, end)
+
 def main(t="ls", save=False):
     global positions
     scans = loader.from_dir(SCANS_DIR, "ls")
@@ -33,7 +47,6 @@ def main(t="ls", save=False):
         ax1.set_ylabel("y [m]")
         ax2.set_xlabel("x [m]")
         ax2.set_ylabel("y [m]")
-        plt.tight_layout()
         
         if odoms is None:
             positions = None
@@ -46,11 +59,9 @@ def main(t="ls", save=False):
                 pose = odom_info["pose"]["pose"]
                 pos = pose["position"]
                 rot = pose["orientation"]
-                if i == 0:
-                    positions[i] = np.array([pos["x"], pos["y"], rot["z"], rot["w"]])
-                else:
-                    positions[i] = np.array([pos["x"], pos["y"], rot["z"], rot["w"]])
+                positions[i] = np.array([pos["x"], pos["y"], rot["z"], rot["w"]])
                 t[i] = odom_info["header"]["stamp"]
+            positions -= positions[0]
 
         global_landmarks = []
         global_real_landmarks = []
@@ -62,28 +73,30 @@ def main(t="ls", save=False):
             tnow = scan_info["header"]["stamp"]
             pnow = positions[np.argwhere(t >= tnow)[0]][0]
             
-            print(pnow)
-            
             img = np.ones((257, 257), dtype=np.uint8) * 255
             scale_factor = 128 / 5
             offset = np.array([128, 128])
+
+            rnow = np.pi - (pnow[2] - pnow[3])
+            rotmat = np.array([[np.cos(rnow), -np.sin(rnow)], [np.sin(rnow), np.cos(rnow)]])
             
             for i, r in enumerate(scan_info["ranges"]):
                 theta = scan_info["angle_min"] + scan_info["angle_increment"] * i
-                x, y = round(r * np.cos(theta) * scale_factor + offset[0]), round(r * np.sin(theta) * scale_factor + offset[1])
-                img[int(y)][int(x)] = 0
+                index = np.array((r * np.cos(theta + rnow + np.pi), r * np.sin(theta + rnow + np.pi)))
+                index += pnow[:2]
+                
+                index = np.round(index * scale_factor + offset).astype(np.int32)
+                if 0 <= index[1] < img.shape[0] and 0 <= index[0] < img.shape[1]:
+                    img[index[1]][index[0]] = 0
             
             ax1.imshow(img, cmap="gray", interpolation="nearest")#, extent=(-3, 3, -3, 3))
-            ax2.imshow(img, cmap="gray", interpolation="nearest")#, extent=(-3, 3, -3, 3))
+            # ax2.imshow(img, cmap="gray", interpolation="nearest")#, extent=(-3, 3, -3, 3))
             ax1.set_xlim([0, img.shape[0]])
             ax1.set_ylim([0, img.shape[1]])
             ax2.set_xlim([0, img.shape[0]])
             ax2.set_ylim([0, img.shape[1]])
             
-            start_time = time.time()
             landmarks = landmark_extractor.extract_landmarks(scan_info)
-            end_time = time.time()
-            # print(f"Time taken: {round((end_time - start_time) * 1000, 2)}ms")
             
             global_real_landmarks = list(filter(lambda l: l.count > REAL_LANDMARK_THRESHOLD, global_landmarks))
                
@@ -93,9 +106,11 @@ def main(t="ls", save=False):
                 ax2.plot([start[0], end[0]], [start[1], end[1]], color="black")
             
             matches = 0
-            for landmark in landmarks:
+            for landmark in map(lambda l: transform_landmark(l, pnow[:2], rotmat), landmarks):
+                # start = (-pnow[:2] + np.dot(rotmat, -landmark.start)) * scale_factor + offset
+                # end =  (-pnow[:2] + np.dot(rotmat, -landmark.end))* scale_factor + offset
                 start = landmark.start * scale_factor + offset
-                end = landmark.end * scale_factor + offset
+                end =  landmark.end * scale_factor + offset
                 ax1.plot([start[0], end[0]], [start[1], end[1]], "r")
                 
                 # Match landmarks
@@ -117,9 +132,8 @@ def main(t="ls", save=False):
                 else:
                     global_landmarks.append(landmark)                     
                  
-            robot_pos = pnow[:2] * scale_factor + offset   
-            ax1.plot(*robot_pos, "ro")
-            ax2.plot(*robot_pos, "ro")
+            ax1.plot(*(pnow[:2] * scale_factor + offset), "ro")
+            ax2.plot(*(pnow[:2] * scale_factor + offset), "ro")
             ax1.set_title(f"Landmarks seen: {len(landmarks)}")
             ax2.set_title(f"Matched landmarks: {matches}/{len(global_real_landmarks)}")
             ax1.grid()

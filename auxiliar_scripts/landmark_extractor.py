@@ -33,9 +33,11 @@ class Landmark:
         if self.y_defined and other.y_defined or self.x_defined and other.x_defined:
             self._equation = (self._equation * self._count + other.equation * other.count) / (self._count + other.count)
         elif self.y_defined:
+            print("!!!")
             a, b, c = other.equation
             self._equation = (self._equation * self._count + np.array((1/b, -1, -c/b)) * other.count) / (self._count + other.count)
         else:
+            print("!!!")
             a, b, c = other.equation
             self._equation = (self._equation * self._count + np.array((-1, 1/a, -c/a)) * other.count) / (self._count + other.count)
         
@@ -142,9 +144,9 @@ class Landmark:
 
 def to_cartesian(theta, r):
     if r > 0.001:
-        return r * math.cos(theta), r * math.sin(theta)
+        return r * np.array((math.cos(theta), math.sin(theta)))
     else:
-        return 500 * math.cos(theta), 500 * math.sin(theta)
+        return 500 * np.array((math.cos(theta), math.sin(theta)))
 
 def extract_features(ls, N=400, C=22, X=0.02, D=10, S=6):
     """Extract features from laser scan data `ls`. 
