@@ -62,16 +62,18 @@ def main(t="ls", save=False):
             print(f"Time taken: {round((end_time - start_time) * 1000, 2)}ms")
             
             global_real_landmarks = list(filter(lambda l: l.count > REAL_LANDMARK_THRESHOLD, global_landmarks))
-            for i, rl1 in enumerate(global_real_landmarks):
-                for rl2 in global_real_landmarks:
-                    if rl1 == rl2 or rl1 is None or rl2 is None:
-                        continue
-                    if rl1.intersects(rl2) and rl1.distance(rl2) < 0.2:
-                        global_real_landmarks[i] = None
-                        global_landmarks.remove(rl1)
-                        rl2.update(rl1)
-                        rl1 = None
-            global_real_landmarks[:] = filter(lambda l: l is not None, global_real_landmarks)
+            # for i, rl1 in enumerate(global_real_landmarks):
+            #     for rl2 in global_real_landmarks:
+            #         if rl1 == rl2 or rl1 is None or rl2 is None:
+            #             continue
+            #         # if rl1.intersects(rl2) and rl1.distance(rl2) < 0.2
+            #         if np.linalg.norm(rl1.closest_point(0, 0) - rl2.closest_point(0, 0)) < 0.25:
+            #             global_real_landmarks[i] = None
+            #             global_landmarks.remove(rl1)
+            #             rl2.update(rl1)
+            #             rl1 = None
+            #             print("Would merge")
+            # global_real_landmarks[:] = filter(lambda l: l is not None, global_real_landmarks)
                
             for real_landmark in global_real_landmarks:     
                 start = real_landmark.start * scale_factor + offset
@@ -88,8 +90,10 @@ def main(t="ls", save=False):
                 # Match landmarks
                 closest = None
                 for glandmark in global_landmarks:
-                    ld = glandmark.distance(landmark)
-                    if glandmark.intersects(landmark) and ld < 1 and (closest is None or ld < closest["difference"]):
+                    # ld = glandmark.distance(landmark)
+                    ld = np.linalg.norm(landmark.closest_point(0, 0) - glandmark.closest_point(0, 0))
+                    # if glandmark.intersects(landmark) and ld < 1 and (closest is None or ld < closest["difference"]):
+                    if ld < 0.25 and (closest is None or ld < closest["difference"]):
                         closest = {"difference": ld, "landmark": glandmark}
                 if closest is not None:
                         # Update global landmark
