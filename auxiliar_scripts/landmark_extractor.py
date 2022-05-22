@@ -10,6 +10,9 @@ def closest_to_line(x, y, a, b, c):
 def ccw(A, B, C):
     return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0])
 
+def distance_on_line(p, s, f):
+	return np.dot(np.linalg.pinv((f - s).reshape((2, 1))), (s - p).reshape(2, 1)), np.dot(np.linalg.pinv((f - s).reshape((2, 1))), (f - p).reshape(2, 1))
+
 class Landmark:
     """This class represents a landmark in the robot's environment.
     A landmark is a line described by `ax + by + c = 0`.
@@ -37,8 +40,8 @@ class Landmark:
             self._equation = (self._equation * self._count + np.array((-1, 1/a, -c/a)) * other.count) / (self._count + other.count)
         
         self._count += other.count
-        other_start = self.closest_point(*other.start)
-        other_end = self.closest_point(*other.end)
+        other_start = self.closest_point(*other.start, False)
+        other_end = self.closest_point(*other.end, False)
         if self.y_defined:
             if other_start[0] < self._start[0]:
                 self._start = other_start
@@ -50,9 +53,17 @@ class Landmark:
             if other_end[1] > self._end[1]:
                 self._end = other_end
         
-    def closest_point(self, x, y):
+    def closest_point(self, x, y, check_bounds=True):
         """Compute the closest point on the line to (`x`, `y`)"""
-        return np.array(closest_to_line(x, y, *self._equation))
+        p = np.array(closest_to_line(x, y, *self._equation))
+        if not check_bounds:
+            return p
+        d1, d2 = distance_on_line(p, self.start, self.end)
+        if np.sign(d1) != np.sign(d2):
+            return p
+        if np.sign(d1) <= 0:
+            return self.end
+        return self.start
     
     def distance(self, other, pos=(0, 0)):
         """A measure of how different two landmarks are"""
@@ -219,11 +230,11 @@ def extract_landmarks(ls):
     landmarks = []
     for a, b, c, (start, end) in features:
         nlandmark = Landmark(a, b, c, start, end)
-        lpos = nlandmark.closest_point(0, 0)
+        lpos = nlandmark.closest_point(0, 0, False)
         isnew = True
         for landmark in landmarks:
             # Only add landmarks sufficiently far apart
-            if np.linalg.norm(landmark.closest_point(0, 0) - lpos) < 0.25:
+            if np.linalg.norm(landmark.closest_point(0, 0, False) - lpos) < 0.25:
                 isnew = False
                 break
         if isnew:

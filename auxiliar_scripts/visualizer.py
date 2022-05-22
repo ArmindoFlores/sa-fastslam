@@ -85,7 +85,7 @@ def main(t="ls", save=False):
                 start = landmark.start * scale_factor + offset
                 end = landmark.end * scale_factor + offset
                 ax1.plot([start[0], end[0]], [start[1], end[1]], "r")
-                ax1.plot(*(landmark.closest_point(0, 0) * scale_factor + offset), "bo")
+                # ax1.plot(*(landmark.closest_point(0, 0) * scale_factor + offset), "bo")
                 
                 # Match landmarks
                 closest = None
