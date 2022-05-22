@@ -4,30 +4,111 @@ import random
 import numpy as np
 
 
+def closest_to_line(x, y, a, b, c):
+    return ((b * (b * x - a * y) - a * c) / (a**2 + b**2), (a * (-b * x + a * y) - b * c) / (a**2 + b**2))
+
+class Landmark:
+    """This class represents a landmark in the robot's environment.
+    A landmark is a line described by `ax + by + c = 0`.
+    """
+    __slots__ = ("_equation", "_start", "_end", "_count")
+    
+    def __init__(self, a, b, c, start, end):
+        """Instantiate a new Landmark object, representing a line described by `ax + by + c = 0`, starting at `start` and ending at `end`."""
+        self._equation = np.array((a, b, c))
+        self._start = np.array(start)
+        self._end = np.array(end)
+        self._count = 1
+    
+    def update(self, a, b, c, start, end):
+        """Update the landmark's parameters using a new observation"""
+        assert self.equation[0] * a + self.equation[1] * b != 0
+        
+        temp_lm = Landmark(a, b, c, start, end)
+        if self.y_defined and temp_lm.y_defined or self.x_defined and temp_lm.x_defined:
+            self._equation = (self._equation * self._count + np.array((a, b, c))) / (self._count + 1)
+        elif self.y_defined:
+            self._equation = (self._equation * self._count + np.array((1/b, -1, -c/b))) / (self._count + 1)
+        else:
+            self._equation = (self._equation * self._count + np.array((-1, 1/a, -c/a))) / (self._count + 1)
+        
+        self._count += 1
+        other_start = self.closest_point(*start)
+        other_end = self.closest_point(*end)
+        if self.y_defined:
+            if other_start[0] < self._start[0]:
+                self._start = other_start
+            if other_end[0] > self._end[0]:
+                self._end = other_end
+        elif self.x_defined:
+            if other_start[1] < self._start[1]:
+                self._start = other_start
+            if other_end[1] > self._end[1]:
+                self._end = other_end
+        
+    def closest_point(self, x, y):
+        """Compute the closest point on the line to (`x`, `y`)"""
+        return np.array(closest_to_line(x, y, *self._equation))
+    
+    def distance(self, other, pos=(0, 0)):
+        """A measure of how different two landmarks are"""
+        return np.linalg.norm(self.closest_point(*pos) - other.closest_point(*pos))
+        
+    @property
+    def y_defined(self):
+        """True if the line can be described by `y = mx + d`"""
+        return self._equation[1] == -1
+    
+    @property
+    def x_defined(self):
+        """True if the line can be described by `x = my + d`"""
+        return self._equation[0] == -1
+    
+    @property
+    def equation(self):
+        """The equation that describes the line 
+        `array([a, b, c])
+        """
+        return self._equation
+    
+    @property
+    def count(self):
+        """How many times the landmark has been observed"""
+        return self._count
+    
+    @property
+    def start(self):
+        """Line segment start position"""
+        return self._start
+    
+    @property
+    def end(self):
+        """Line segment end position"""
+        return self._end
+
 def to_cartesian(theta, r):
     if r > 0.001:
         return r * math.cos(theta), r * math.sin(theta)
     else:
         return 500 * math.cos(theta), 500 * math.sin(theta)
 
-def closest_to_line(x, y, a, b, c):
-    return ((b * (b * x - a * y) - a * c) / (a**2 + b**2), (a * (-b * x + a * y) - b * c) / (a**2 + b**2))
-
-def extract_features(ls, N=400, C=22, X=0.02, D=10):
+def extract_features(ls, N=400, C=22, X=0.02, D=10, S=6):
+    """Extract features from laser scan data `ls`. 
+    `N`, `C`, `X`, `D`, and `S` are the parameters for the RANSAC algorithm.
+    """
     features = []
     D = int(round(math.radians(D) / ls["angle_increment"])) 
-    S = 6
     rsize = len(ls["ranges"])
     cartesian = tuple(to_cartesian(ls["angle_min"] + i * ls["angle_increment"], r) for i, r in enumerate(ls["ranges"]))
     available = [i for i in range(rsize) if ls["ranges"][i] > 0.001]
     
     # Pre-allocate lists
-    total = [None] * 360
+    total = [None] * rsize
     total_size = 0
-    cartesian_sample_x = [0] * 360
-    cartesian_sample_y = [0] * 360
+    cartesian_sample_x = [0] * rsize
+    cartesian_sample_y = [0] * rsize
     cartesian_sample_size = 0
-    close_enough = [None] * 360
+    close_enough = [None] * rsize
     close_enough_size = 0
     
     n = 0
@@ -90,15 +171,18 @@ def extract_features(ls, N=400, C=22, X=0.02, D=10):
     return features
 
 def extract_landmarks(ls):
+    """Extract a list of landmarks from a laser scan `ls`"""
     features = extract_features(ls)
     landmarks = []
     for a, b, c, (start, end) in features:
-        landmark_pos = np.array(closest_to_line(0, 0, a, b, c))  
+        nlandmark = Landmark(a, b, c, start, end)
+        lpos = nlandmark.closest_point(0, 0)
         isnew = True
-        for *_, landmark in landmarks:
-            if np.linalg.norm(landmark - landmark_pos) < 0.25:
+        for landmark in landmarks:
+            # Only add landmarks sufficiently far apart
+            if np.linalg.norm(landmark.closest_point(0, 0) - lpos) < 0.25:
                 isnew = False
                 break
         if isnew:
-            landmarks.append((a, b, c, (start, end), landmark_pos))
+            landmarks.append(nlandmark)
     return landmarks

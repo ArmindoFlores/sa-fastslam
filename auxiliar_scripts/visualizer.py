@@ -13,18 +13,31 @@ import loader
 SAMPLE = "corredor-16-maio"
 SCANS_DIR = os.path.join("laser-scans", SAMPLE)
 ODOM_DIR = os.path.join("odometry", SAMPLE)
-        
+REAL_LANDMARK_THRESHOLD = 6
+
 
 def main(t="ls", save=False):
+    global global_landmarks
     if t == "ls": scans = loader.from_dir(SCANS_DIR, "ls")
     else: odoms = loader.from_dir(ODOM_DIR, "odom")
     
     n = 0
-    plt.xlabel("x [m]")
-    plt.ylabel("y [m]")
+
+    fig = plt.figure()
+    ax1 = fig.add_subplot(121)
+    ax2 = fig.add_subplot(122)
+    ax1.set_xlabel("x [m]")
+    ax1.set_ylabel("y [m]")
+    ax2.set_xlabel("x [m]")
+    ax2.set_ylabel("y [m]")
+    plt.tight_layout()
     
     if t == "ls":
+        global_landmarks = []
+        
         for scan in scans:
+            print("Real landmarks:", len(tuple(filter(lambda l: l.count > REAL_LANDMARK_THRESHOLD, global_landmarks))))
+            
             with open(scan, "rb") as f:
                 scan_info = pickle.load(f)
             
@@ -37,30 +50,63 @@ def main(t="ls", save=False):
                 x, y = round(r * np.cos(theta) * scale_factor + offset[0]), round(r * np.sin(theta) * scale_factor + offset[1])
                 img[int(y)][int(x)] = 0
             
+            ax1.imshow(img, cmap="gray", interpolation="nearest")#, extent=(-3, 3, -3, 3))
+            ax2.imshow(img, cmap="gray", interpolation="nearest")#, extent=(-3, 3, -3, 3))
+            ax1.set_xlim([0, img.shape[0]])
+            ax1.set_ylim([0, img.shape[1]])
+            ax2.set_xlim([0, img.shape[0]])
+            ax2.set_ylim([0, img.shape[1]])
+            
             start_time = time.time()
             landmarks = landmark_extractor.extract_landmarks(scan_info)
             end_time = time.time()
             print(f"Time taken: {round((end_time - start_time) * 1000, 2)}ms")
             
-            for _, _, _, (start, end), landmark_pos in landmarks:
-                start, end = np.array(start), np.array(end)
-                start = start * scale_factor + offset
-                end = end * scale_factor + offset
-                plt.plot([start[0], end[0]], [start[1], end[1]], "r")
-                plt.plot(*(landmark_pos * scale_factor + offset), "bo")
+            for real_landmark in filter(lambda l: l.count > REAL_LANDMARK_THRESHOLD, global_landmarks):
+                start = real_landmark.start * scale_factor + offset
+                end = real_landmark.end * scale_factor + offset
+                # landmark_pos = real_landmark.closest_point(0, 0)
+                # ax2.plot(*(landmark_pos * scale_factor + offset), "o", color="black")
+                ax2.plot([start[0], end[0]], [start[1], end[1]], color="black")
+                
+            for landmark in landmarks:
+                start = landmark.start * scale_factor + offset
+                end = landmark.end * scale_factor + offset
+                ax1.plot([start[0], end[0]], [start[1], end[1]], "r")
+                ax1.plot(*(landmark.closest_point(0, 0) * scale_factor + offset), "bo")
+                
+                # Match landmarks
+                closest = None
+                for glandmark in global_landmarks:
+                    ld = glandmark.distance(landmark)
+                    if ld < 1 and (closest is None or ld < closest["difference"]):
+                        closest = {"difference": ld, "landmark": glandmark}
+                if closest is not None:
+                    # Update global landmark
+                    if closest["landmark"].count >= REAL_LANDMARK_THRESHOLD:
+                        start = closest["landmark"].start * scale_factor + offset
+                        end = closest["landmark"].end * scale_factor + offset
+                        # landmark_pos = closest["landmark"].closest_point(0, 0)
+                        # ax2.plot(*(landmark_pos * scale_factor + offset), "o", color="green")
+                        ax2.plot([start[0], end[0]], [start[1], end[1]], color="green")
+                    closest["landmark"].update(*landmark.equation, landmark.start, landmark.end)
+                else:
+                    # A match was not found
+                    global_landmarks.append(landmark)    
                     
-            plt.imshow(img, cmap="gray", interpolation="nearest")#, extent=(-3, 3, -3, 3))
-            plt.xlim([0, img.shape[0]])
-            plt.ylim([0, img.shape[1]])
-            plt.plot(0, 0, "ro")
+            ax1.plot(*offset, "ro")
+            ax2.plot(*offset, "ro")
             
             if save:
                 plt.savefig(f"output/ls{str(n+1).zfill(3)}.png")
             else:
-                m = n+100
-                plt.title(str(m))
+                ax1.grid()
+                ax2.grid()
+                ax1.set_title(str(n))
+                ax2.set_title(str(n))
                 plt.pause(0.05)
-            plt.clf()
+            ax1.clear()
+            ax2.clear()
             n += 1
     else:
         x, y = [], []
