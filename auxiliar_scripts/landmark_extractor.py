@@ -7,6 +7,9 @@ import numpy as np
 def closest_to_line(x, y, a, b, c):
     return ((b * (b * x - a * y) - a * c) / (a**2 + b**2), (a * (-b * x + a * y) - b * c) / (a**2 + b**2))
 
+def ccw(A, B, C):
+    return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0])
+
 class Landmark:
     """This class represents a landmark in the robot's environment.
     A landmark is a line described by `ax + by + c = 0`.
@@ -20,21 +23,22 @@ class Landmark:
         self._end = np.array(end)
         self._count = 1
     
-    def update(self, a, b, c, start, end):
+    def update(self, other):
         """Update the landmark's parameters using a new observation"""
-        assert self.equation[0] * a + self.equation[1] * b != 0
+        assert self.equation[0] * other.equation[0] + self.equation[1] * other.equation[1] != 0
         
-        temp_lm = Landmark(a, b, c, start, end)
-        if self.y_defined and temp_lm.y_defined or self.x_defined and temp_lm.x_defined:
-            self._equation = (self._equation * self._count + np.array((a, b, c))) / (self._count + 1)
+        if self.y_defined and other.y_defined or self.x_defined and other.x_defined:
+            self._equation = (self._equation * self._count + other.equation * other.count) / (self._count + other.count)
         elif self.y_defined:
-            self._equation = (self._equation * self._count + np.array((1/b, -1, -c/b))) / (self._count + 1)
+            a, b, c = other.equation
+            self._equation = (self._equation * self._count + np.array((1/b, -1, -c/b)) * other.count) / (self._count + other.count)
         else:
-            self._equation = (self._equation * self._count + np.array((-1, 1/a, -c/a))) / (self._count + 1)
+            a, b, c = other.equation
+            self._equation = (self._equation * self._count + np.array((-1, 1/a, -c/a)) * other.count) / (self._count + other.count)
         
-        self._count += 1
-        other_start = self.closest_point(*start)
-        other_end = self.closest_point(*end)
+        self._count += other.count
+        other_start = self.closest_point(*other.start)
+        other_end = self.closest_point(*other.end)
         if self.y_defined:
             if other_start[0] < self._start[0]:
                 self._start = other_start
@@ -53,6 +57,45 @@ class Landmark:
     def distance(self, other, pos=(0, 0)):
         """A measure of how different two landmarks are"""
         return np.linalg.norm(self.closest_point(*pos) - other.closest_point(*pos))
+
+    def intersects(self, other, threshold=0.3):
+        """Check if this landmark intersects with `other`."""
+        if self.equation[1] != 0:
+            self_d_vector = np.array([1, -self.equation[0]/self.equation[1]])
+        else:
+            self_d_vector = np.array([-self.equation[1]/self.equation[0], 1])
+        if other.equation[1] != 0:
+            other_d_vector = np.array([1, -other.equation[0]/other.equation[1]])
+        else:
+            other_d_vector = np.array([-other.equation[1]/other.equation[0], 1])
+        self_d_vector /= np.linalg.norm(self_d_vector)
+        other_d_vector /= np.linalg.norm(other_d_vector)
+        
+        self_start = self.start - threshold * self_d_vector
+        self_end = self.end + threshold * self_d_vector
+        other_start = other.start - threshold * other_d_vector
+        other_end = other.end + threshold * other_d_vector
+        
+        return all((
+            ccw(self_start, other_start, other_end) != ccw(self_end, other_start, other_end),
+            ccw(self_start, self_end, other_start) != ccw(self_start, self_end, other_end)
+        ))
+        # return any((
+        #     all((
+        #         any((
+        #             (other.start[0] - threshold < self.start[0] < other.end[0] + threshold),
+        #             (other.start[0] - threshold < self.end[0] < other.end[0] + threshold),
+        #             (self.start[0] - threshold < other.start[0] < self.end[0] + threshold),
+        #             (self.start[0] - threshold < other.end[0] < self.end[0] + threshold)
+        #         )),
+        #         any((
+        #             (other.start[1] - threshold < self.start[1] < other.end[1] + threshold),
+        #             (other.start[1] - threshold < self.end[1] < other.end[1] + threshold),
+        #             (self.start[1] - threshold < other.start[1] < self.end[1] + threshold),
+        #             (self.start[1] - threshold < other.end[1] < self.end[1] + threshold)
+        #         ))
+        #     )),
+        # ))
         
     @property
     def y_defined(self):

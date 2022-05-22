@@ -34,6 +34,7 @@ def main(t="ls", save=False):
     
     if t == "ls":
         global_landmarks = []
+        global_real_landmarks = []
         
         for scan in scans:           
             with open(scan, "rb") as f:
@@ -60,11 +61,21 @@ def main(t="ls", save=False):
             end_time = time.time()
             print(f"Time taken: {round((end_time - start_time) * 1000, 2)}ms")
             
-            for real_landmark in filter(lambda l: l.count > REAL_LANDMARK_THRESHOLD, global_landmarks):
+            global_real_landmarks = list(filter(lambda l: l.count > REAL_LANDMARK_THRESHOLD, global_landmarks))
+            for i, rl1 in enumerate(global_real_landmarks):
+                for rl2 in global_real_landmarks:
+                    if rl1 == rl2 or rl1 is None or rl2 is None:
+                        continue
+                    if rl1.intersects(rl2) and rl1.distance(rl2) < 0.2:
+                        global_real_landmarks[i] = None
+                        global_landmarks.remove(rl1)
+                        rl2.update(rl1)
+                        rl1 = None
+            global_real_landmarks[:] = filter(lambda l: l is not None, global_real_landmarks)
+               
+            for real_landmark in global_real_landmarks:     
                 start = real_landmark.start * scale_factor + offset
                 end = real_landmark.end * scale_factor + offset
-                # landmark_pos = real_landmark.closest_point(0, 0)
-                # ax2.plot(*(landmark_pos * scale_factor + offset), "o", color="black")
                 ax2.plot([start[0], end[0]], [start[1], end[1]], color="black")
             
             matches = 0
@@ -78,28 +89,23 @@ def main(t="ls", save=False):
                 closest = None
                 for glandmark in global_landmarks:
                     ld = glandmark.distance(landmark)
-                    if ld < 1 and (closest is None or ld < closest["difference"]):
+                    if glandmark.intersects(landmark) and ld < 1 and (closest is None or ld < closest["difference"]):
                         closest = {"difference": ld, "landmark": glandmark}
                 if closest is not None:
-                    # Update global landmark
-                    if closest["landmark"].count >= REAL_LANDMARK_THRESHOLD:
-                        start = closest["landmark"].start * scale_factor + offset
-                        end = closest["landmark"].end * scale_factor + offset
-                        # landmark_pos = closest["landmark"].closest_point(0, 0)
-                        # ax2.plot(*(landmark_pos * scale_factor + offset), "o", color="green")
-                        ax2.plot([start[0], end[0]], [start[1], end[1]], color="green")
-                        matches += 1
-                    closest["landmark"].update(*landmark.equation, landmark.start, landmark.end)
+                        # Update global landmark
+                        if closest["landmark"].count >= REAL_LANDMARK_THRESHOLD:
+                            start = closest["landmark"].start * scale_factor + offset
+                            end = closest["landmark"].end * scale_factor + offset
+                            ax2.plot([start[0], end[0]], [start[1], end[1]], color="green")
+                            matches += 1
+                        closest["landmark"].update(landmark)
                 else:
-                    # A match was not found
-                    global_landmarks.append(landmark)    
-                    
-            real_landmarks = len(tuple(filter(lambda l: l.count > REAL_LANDMARK_THRESHOLD, global_landmarks)))
+                    global_landmarks.append(landmark)                     
                     
             ax1.plot(*offset, "ro")
             ax2.plot(*offset, "ro")
             ax1.set_title(f"Landmarks seen: {len(landmarks)}")
-            ax2.set_title(f"Matched landmarks: {matches}/{real_landmarks}")
+            ax2.set_title(f"Matched landmarks: {matches}/{len(global_real_landmarks)}")
             ax1.grid()
             ax2.grid()
             
