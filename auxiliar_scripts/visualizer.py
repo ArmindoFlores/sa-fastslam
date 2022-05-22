@@ -35,9 +35,7 @@ def main(t="ls", save=False):
     if t == "ls":
         global_landmarks = []
         
-        for scan in scans:
-            print("Real landmarks:", len(tuple(filter(lambda l: l.count > REAL_LANDMARK_THRESHOLD, global_landmarks))))
-            
+        for scan in scans:           
             with open(scan, "rb") as f:
                 scan_info = pickle.load(f)
             
@@ -68,7 +66,8 @@ def main(t="ls", save=False):
                 # landmark_pos = real_landmark.closest_point(0, 0)
                 # ax2.plot(*(landmark_pos * scale_factor + offset), "o", color="black")
                 ax2.plot([start[0], end[0]], [start[1], end[1]], color="black")
-                
+            
+            matches = 0
             for landmark in landmarks:
                 start = landmark.start * scale_factor + offset
                 end = landmark.end * scale_factor + offset
@@ -89,21 +88,24 @@ def main(t="ls", save=False):
                         # landmark_pos = closest["landmark"].closest_point(0, 0)
                         # ax2.plot(*(landmark_pos * scale_factor + offset), "o", color="green")
                         ax2.plot([start[0], end[0]], [start[1], end[1]], color="green")
+                        matches += 1
                     closest["landmark"].update(*landmark.equation, landmark.start, landmark.end)
                 else:
                     # A match was not found
                     global_landmarks.append(landmark)    
                     
+            real_landmarks = len(tuple(filter(lambda l: l.count > REAL_LANDMARK_THRESHOLD, global_landmarks)))
+                    
             ax1.plot(*offset, "ro")
             ax2.plot(*offset, "ro")
+            ax1.set_title(f"Landmarks seen: {len(landmarks)}")
+            ax2.set_title(f"Matched landmarks: {matches}/{real_landmarks}")
+            ax1.grid()
+            ax2.grid()
             
             if save:
                 plt.savefig(f"output/ls{str(n+1).zfill(3)}.png")
             else:
-                ax1.grid()
-                ax2.grid()
-                ax1.set_title(str(n))
-                ax2.set_title(str(n))
                 plt.pause(0.05)
             ax1.clear()
             ax2.clear()
