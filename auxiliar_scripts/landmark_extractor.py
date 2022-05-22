@@ -10,8 +10,8 @@ def to_cartesian(theta, r):
     else:
         return 500 * math.cos(theta), 500 * math.sin(theta)
 
-def closest_to_line(x, y, m, b):
-    return (((x + m * y) - m * b) / (m**2 + 1), (m * (x + m * y) + b) / (m**2 + 1))
+def closest_to_line(x, y, a, b, c):
+    return ((b * (b * x - a * y) - a * c) / (a**2 + b**2), (a * (-b * x + a * y) - b * c) / (a**2 + b**2))
 
 def extract_features(ls, N=400, C=22, X=0.02, D=10):
     features = []
@@ -72,10 +72,15 @@ def extract_features(ls, N=400, C=22, X=0.02, D=10):
         if close_enough_size > C:
             # Calculate new least squares best fit line
             A = np.vstack([[cartesian[i][0] for i in close_enough[:close_enough_size]], np.ones(close_enough_size)]).T
-            m, b = np.linalg.lstsq(A, np.array([cartesian[i][1] for i in close_enough[:close_enough_size]]), rcond=None)[0]
+            a, c = np.linalg.lstsq(A, np.array([cartesian[i][1] for i in close_enough[:close_enough_size]]), rcond=None)[0]
+            b = -1
+            if m > 10:
+                A = np.vstack([[cartesian[i][1] for i in close_enough[:close_enough_size]], np.ones(close_enough_size)]).T
+                b, c = np.linalg.lstsq(A, np.array([cartesian[i][0] for i in close_enough[:close_enough_size]]), rcond=None)[0]
+                a = -1
             
-            line_points = sorted((closest_to_line(*cartesian[i], m, b) for i in close_enough[:close_enough_size]), key=lambda i: i[0])
-            features.append((m, b, (line_points[0], line_points[-1])))
+            line_points = sorted((closest_to_line(*cartesian[i], a, b, c) for i in close_enough[:close_enough_size]), key=lambda i: i[0])
+            features.append((a, b, c, (line_points[0], line_points[-1])))
             
             for point in close_enough[:close_enough_size]:
                 try:
@@ -87,13 +92,13 @@ def extract_features(ls, N=400, C=22, X=0.02, D=10):
 def extract_landmarks(ls):
     features = extract_features(ls)
     landmarks = []
-    for m, b, (start, end) in features:
-        landmark_pos = np.array(closest_to_line(0, 0, m, b))  
+    for a, b, c, (start, end) in features:
+        landmark_pos = np.array(closest_to_line(0, 0, a, b, c))  
         isnew = True
         for *_, landmark in landmarks:
             if np.linalg.norm(landmark - landmark_pos) < 0.25:
                 isnew = False
                 break
         if isnew:
-            landmarks.append((m, b, (start, end), landmark_pos))
+            landmarks.append((a, b, c, (start, end), landmark_pos))
     return landmarks

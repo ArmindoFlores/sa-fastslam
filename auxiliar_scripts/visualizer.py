@@ -42,7 +42,7 @@ def main(t="ls", save=False):
             end_time = time.time()
             print(f"Time taken: {round((end_time - start_time) * 1000, 2)}ms")
             
-            for _, _, (start, end), landmark_pos in landmarks:
+            for _, _, _, (start, end), landmark_pos in landmarks:
                 start, end = np.array(start), np.array(end)
                 start = start * scale_factor + offset
                 end = end * scale_factor + offset
