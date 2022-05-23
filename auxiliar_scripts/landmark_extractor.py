@@ -195,7 +195,9 @@ def extract_features(ls, N=400, C=22, X=0.02, D=10, S=6):
             cartesian_sample_size += 1
             
         A = np.vstack([cartesian_sample_x[:cartesian_sample_size], np.ones(cartesian_sample_size)]).T
-        m, b = np.linalg.lstsq(A, cartesian_sample_y[:cartesian_sample_size], rcond=None)[0]
+        (m, b), s = np.linalg.lstsq(A, cartesian_sample_y[:cartesian_sample_size], rcond=None)[:2]
+        if s / S > 1:
+            continue
         
         # Find all readings within X meters of the line
         d = 1 / pow(m*m + 1, 0.5)
@@ -209,15 +211,18 @@ def extract_features(ls, N=400, C=22, X=0.02, D=10, S=6):
         if close_enough_size > C:
             # Calculate new least squares best fit line
             A = np.vstack([[cartesian[i][0] for i in close_enough[:close_enough_size]], np.ones(close_enough_size)]).T
-            a, c = np.linalg.lstsq(A, np.array([cartesian[i][1] for i in close_enough[:close_enough_size]]), rcond=None)[0]
+            (a, c), s = np.linalg.lstsq(A, np.array([cartesian[i][1] for i in close_enough[:close_enough_size]]), rcond=None)[:2]
             b = -1
             if m > 10:
                 A = np.vstack([[cartesian[i][1] for i in close_enough[:close_enough_size]], np.ones(close_enough_size)]).T
-                b, c = np.linalg.lstsq(A, np.array([cartesian[i][0] for i in close_enough[:close_enough_size]]), rcond=None)[0]
+                (b, c), s = np.linalg.lstsq(A, np.array([cartesian[i][0] for i in close_enough[:close_enough_size]]), rcond=None)[:2]
                 a = -1
             
+            if s[0] / close_enough_size > 10:
+                continue
+            
             line_points = sorted((closest_to_line(*cartesian[i], a, b, c) for i in close_enough[:close_enough_size]), key=lambda i: i[0])
-            features.append((a, b, c, (line_points[0], line_points[-1])))
+            features.append((a, b, c, (line_points[0], line_points[-1]), s[0] / close_enough_size))
             
             for point in close_enough[:close_enough_size]:
                 try:
@@ -230,15 +235,18 @@ def extract_landmarks(ls, T=0.25, N=400, C=22, X=0.02, D=10, S=6):
     """Extract a list of landmarks from a laser scan `ls`"""
     features = extract_features(ls, N=N, C=C, X=X, D=D, S=S)
     landmarks = []
-    for a, b, c, (start, end) in features:
+    for a, b, c, (start, end), s in features:
         nlandmark = Landmark(a, b, c, start, end)
         lpos = nlandmark.closest_point(0, 0, False)
-        isnew = True
-        for landmark in landmarks:
+        for i, (landmark, olds) in enumerate(landmarks):
             # Only add landmarks sufficiently far apart
             if np.linalg.norm(landmark.closest_point(0, 0, False) - lpos) < T:
-                isnew = False
+                landmarks.append((nlandmark, s))
                 break
-        if isnew:
-            landmarks.append(nlandmark)
-    return landmarks
+            else:
+                if s < olds:
+                    landmarks[i] = (nlandmark, s)
+                    break
+        else:
+            landmarks.append((nlandmark, s))
+    return [l[0]for l in landmarks]

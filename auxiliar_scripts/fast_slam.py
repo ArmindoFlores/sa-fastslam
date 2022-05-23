@@ -99,10 +99,12 @@ def update_display(state):
         state["ls_img"].set_clim(state["last_ls"].min(), state["last_ls"].max())
         result.append(state["ls_img"])
         
-    if state["matches"]:
-        for landmark in state["matcher"].valid_landmarks:
-            result.append(state["ax"].plot([250 - landmark.start[1], 250 - landmark.end[1]], [250 - landmark.start[0], 250 - landmark.end[0]], color="green")[0])
-        state["matches"] = []
+    for i, landmark in enumerate(state["matcher"].valid_landmarks):
+        if len(state["landmarks"]) > i:
+            state["landmarks"][i].set_data([250 - landmark.start[1], 250 - landmark.end[1]], [250 - landmark.start[0], 250 - landmark.end[0]])
+        else:
+            state["landmarks"].append(state["ax"].plot([250 - landmark.start[1], 250 - landmark.end[1]], [250 - landmark.start[0], 250 - landmark.end[0]], color="green")[0])
+    result += state["landmarks"]
         
     return result
 
@@ -124,7 +126,7 @@ def update(n, state):
                 break
         state["velocity"] = (np.random.random() + 0.5) * 0.1
     
-    if n > 10000:
+    if n > 1000:
         real_movement = normalize(state["destination"] - state["pos"]) *  state["velocity"]
     else:
         real_movement = np.array([0, 0])
@@ -146,7 +148,7 @@ def update(n, state):
             "angle_min":0 
         }, 20, X=10)
         state["matches"] = []
-        for landmark in map(lambda l: transform_landmark(l, np.zeros(2)+125, np.identity(2)), landmarks):
+        for landmark in map(lambda l: transform_landmark(l, 250-state["pos"], np.identity(2)), landmarks):
             match = state["matcher"].observe(landmark)
             if match is not None:
                 state["matches"].append(match)
@@ -186,9 +188,10 @@ def main():
         "ls_img": ls_img,
         "last_ls": image,
         "update_ls": False,
-        "ax": ax2,
+        "ax": ax1,
         "matcher": landmark_matching.LandmarkMatcher(distance_threshold=15),
         "matches": [],
+        "landmarks": [],
     }
     
     
