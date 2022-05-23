@@ -146,7 +146,7 @@ def to_cartesian(theta, r):
     if r > 0.001:
         return r * np.array((math.cos(theta), math.sin(theta)))
     else:
-        return 500 * np.array((math.cos(theta), math.sin(theta)))
+        return 5000 * np.array((math.cos(theta), math.sin(theta)))
 
 def extract_features(ls, N=400, C=22, X=0.02, D=10, S=6):
     """Extract features from laser scan data `ls`. 
@@ -226,9 +226,9 @@ def extract_features(ls, N=400, C=22, X=0.02, D=10, S=6):
                     pass
     return features
 
-def extract_landmarks(ls):
+def extract_landmarks(ls, T=0.25, N=400, C=22, X=0.02, D=10, S=6):
     """Extract a list of landmarks from a laser scan `ls`"""
-    features = extract_features(ls)
+    features = extract_features(ls, N=N, C=C, X=X, D=D, S=S)
     landmarks = []
     for a, b, c, (start, end) in features:
         nlandmark = Landmark(a, b, c, start, end)
@@ -236,7 +236,7 @@ def extract_landmarks(ls):
         isnew = True
         for landmark in landmarks:
             # Only add landmarks sufficiently far apart
-            if np.linalg.norm(landmark.closest_point(0, 0, False) - lpos) < 0.25:
+            if np.linalg.norm(landmark.closest_point(0, 0, False) - lpos) < T:
                 isnew = False
                 break
         if isnew:

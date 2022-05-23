@@ -25,7 +25,7 @@ class LandmarkMatcher:
         else:
             self._landmarks.append([landmark, time.time()]) 
         
-        if len(self._landmarks) - len(self.valid_landmarks) > self.max_invalid_landmarks:
+        if self.max_invalid_landmarks is not None and len(self._landmarks) - len(self.valid_landmarks) > self.max_invalid_landmarks:
             # Remove oldest lowest-seen invalid landmark
             to_remove = None
             for i, (landmark, age) in enumerate(self._landmarks):
