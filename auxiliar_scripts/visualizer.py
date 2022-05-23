@@ -1,15 +1,15 @@
 import os
 import pickle
 import sys
-import time
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 import landmark_extractor
+import landmark_matching
 import loader
 
-SAMPLE = "salalab-16-maio"
+SAMPLE = "corredor-16-maio"
 SCANS_DIR = os.path.join("laser-scans", SAMPLE)
 ODOM_DIR = os.path.join("odometry", SAMPLE)
 REAL_LANDMARK_THRESHOLD = 6
@@ -43,28 +43,24 @@ def main(t="ls", save=False):
         fig = plt.figure()
         ax1 = fig.add_subplot(121)
         ax2 = fig.add_subplot(122)
-        ax1.set_xlabel("x [m]")
-        ax1.set_ylabel("y [m]")
-        ax2.set_xlabel("x [m]")
-        ax2.set_ylabel("y [m]")
-        
         if odoms is None:
             positions = None
         else:
             t = np.ones(len(odoms))
             positions = np.zeros((len(odoms), 4))
-            for i, odom in enumerate(odoms):
+            for i, odom in enumerate(odoms):                
                 with open(odom, "rb") as f:
                     odom_info = pickle.load(f)
-                pose = odom_info["pose"]["pose"]
-                pos = pose["position"]
-                rot = pose["orientation"]
-                positions[i] = np.array([pos["x"], pos["y"], rot["z"], rot["w"]])
+                twist = odom_info["twist"]["twist"]
+                pos = twist["linear"]
+                rot = twist["angular"]
+                if i == 0:
+                    positions[i] = np.array([pos["x"], pos["y"], rot["z"], 0])
+                else:
+                    positions[i] += np.array([pos["x"], pos["y"], rot["z"], 0])
                 t[i] = odom_info["header"]["stamp"]
-            positions -= positions[0]
 
-        global_landmarks = []
-        global_real_landmarks = []
+        matcher = landmark_matching.LandmarkMatcher(REAL_LANDMARK_THRESHOLD, max_invalid_landmarks=10)
         
         for scan in scans:           
             with open(scan, "rb") as f:
@@ -75,9 +71,10 @@ def main(t="ls", save=False):
             
             img = np.ones((257, 257), dtype=np.uint8) * 255
             scale_factor = 128 / 5
+            img_scale = 6 / img.shape[0]
             offset = np.array([128, 128])
 
-            rnow = np.pi - (pnow[2] - pnow[3])
+            rnow = np.pi - pnow[2]
             rotmat = np.array([[np.cos(rnow), -np.sin(rnow)], [np.sin(rnow), np.cos(rnow)]])
             
             for i, r in enumerate(scan_info["ranges"]):
@@ -89,55 +86,51 @@ def main(t="ls", save=False):
                 if 0 <= index[1] < img.shape[0] and 0 <= index[0] < img.shape[1]:
                     img[index[1]][index[0]] = 0
             
-            ax1.imshow(img, cmap="gray", interpolation="nearest")#, extent=(-3, 3, -3, 3))
-            # ax2.imshow(img, cmap="gray", interpolation="nearest")#, extent=(-3, 3, -3, 3))
-            ax1.set_xlim([0, img.shape[0]])
-            ax1.set_ylim([0, img.shape[1]])
-            ax2.set_xlim([0, img.shape[0]])
-            ax2.set_ylim([0, img.shape[1]])
+            ax1.imshow(img, cmap="gray", interpolation="nearest", extent=(-3, 3, 3, -3))
+            ax2.imshow(img, cmap="gray", interpolation="nearest", extent=(-3, 3, 3, -3))
+            # ax1.set_xlim([0, img.shape[0]])
+            # ax1.set_ylim([0, img.shape[1]])
+            # ax2.set_xlim([0, img.shape[0]])
+            # ax2.set_ylim([0, img.shape[1]])
+            ax1.set_xlim([-3, 3])
+            ax1.set_ylim([-3, 3])
+            ax2.set_xlim([-3, 3])
+            ax2.set_ylim([-3, 3])
             
             landmarks = landmark_extractor.extract_landmarks(scan_info)
-            
-            global_real_landmarks = list(filter(lambda l: l.count > REAL_LANDMARK_THRESHOLD, global_landmarks))
                
-            for real_landmark in global_real_landmarks:     
-                start = real_landmark.start * scale_factor + offset
-                end = real_landmark.end * scale_factor + offset
+            for real_landmark in matcher.valid_landmarks:     
+                start = real_landmark.start * scale_factor * img_scale
+                end = real_landmark.end * scale_factor * img_scale
                 ax2.plot([start[0], end[0]], [start[1], end[1]], color="black")
             
             matches = 0
             for landmark in map(lambda l: transform_landmark(l, pnow[:2], rotmat), landmarks):
-                # start = (-pnow[:2] + np.dot(rotmat, -landmark.start)) * scale_factor + offset
-                # end =  (-pnow[:2] + np.dot(rotmat, -landmark.end))* scale_factor + offset
-                start = landmark.start * scale_factor + offset
-                end =  landmark.end * scale_factor + offset
+                # Update our landmarks
+                match = matcher.observe(landmark)
+                
+                start = landmark.start * scale_factor * img_scale
+                end =  landmark.end * scale_factor * img_scale
                 ax1.plot([start[0], end[0]], [start[1], end[1]], "r")
                 
-                # Match landmarks
-                closest = None
-                for glandmark in global_landmarks:
-                    # ld = glandmark.distance(landmark)
-                    ld = np.linalg.norm(landmark.closest_point(0, 0) - glandmark.closest_point(0, 0))
-                    # if glandmark.intersects(landmark) and ld < 1 and (closest is None or ld < closest["difference"]):
-                    if ld < 0.25 and (closest is None or ld < closest["difference"]):
-                        closest = {"difference": ld, "landmark": glandmark}
-                if closest is not None:
-                        # Update global landmark
-                        if closest["landmark"].count >= REAL_LANDMARK_THRESHOLD:
-                            start = closest["landmark"].start * scale_factor + offset
-                            end = closest["landmark"].end * scale_factor + offset
-                            ax2.plot([start[0], end[0]], [start[1], end[1]], color="green")
-                            matches += 1
-                        closest["landmark"].update(landmark)
-                else:
-                    global_landmarks.append(landmark)                     
-                 
-            ax1.plot(*(pnow[:2] * scale_factor + offset), "ro")
-            ax2.plot(*(pnow[:2] * scale_factor + offset), "ro")
+                if match is not None:
+                    start = match.start * scale_factor * img_scale
+                    end = match.end * scale_factor * img_scale
+                    ax2.plot([start[0], end[0]], [start[1], end[1]], color="green")
+                    matches += 1
+
+            ax1.plot(*(pnow[:2] * scale_factor * img_scale), "ro")
+            ax2.plot(*(pnow[:2] * scale_factor * img_scale), "ro")
             ax1.set_title(f"Landmarks seen: {len(landmarks)}")
-            ax2.set_title(f"Matched landmarks: {matches}/{len(global_real_landmarks)}")
+            ax1.set_xlabel("x [m]")
+            ax1.set_ylabel("y [m]")
+            ax2.set_xlabel("x [m]")
+            ax2.set_ylabel("y [m]")
+            ax2.set_title(f"Matched landmarks: {matches}/{len(matcher.valid_landmarks)}")
             ax1.grid()
             ax2.grid()
+            
+            print(len(matcher.landmarks))
             
             if save:
                 plt.savefig(f"output/ls{str(n+1).zfill(3)}.png")
@@ -151,16 +144,15 @@ def main(t="ls", save=False):
         for odom in odoms:
             with open(odom, "rb") as f:
                 odom_info = pickle.load(f)
-            pos = odom_info["twist"]["twist"]["angular"]
-            x.append(pos["x"])
-            y.append(pos["y"])
-            z.append(pos["z"])
+            pose = odom_info["pose"]["pose"]["position"]
+            x.append(pose["x"])
+            y.append(pose["y"])
+            # z.append(pos["z"])
             # w.append(pos["w"])
-        
-        plt.plot(x)
-        plt.plot(y)
-        plt.plot(z)
-        plt.plot(w)
+        plt.scatter(x, y)
+        plt.xlabel("x [m]")
+        plt.ylabel("y [m]")
+        plt.grid()
         plt.show()
 
 
