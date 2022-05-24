@@ -151,7 +151,7 @@ def update(n, state):
             "ranges": laser_data,
             "angle_increment": 2 * np.pi / 360,
             "angle_min":0 
-        }, 20, C=25, X=3)
+        }, 20, C=50, X=3)
         state["matches"] = []
         for landmark in map(lambda l: transform_landmark(l, 250-state["pos"], np.identity(2)), landmarks):
             match = state["matcher"].observe(landmark)
@@ -163,7 +163,7 @@ def update(n, state):
 
 def main():
     np.random.seed(int(time.time() * 13) % 2**32)
-    map_data = cv2.cvtColor(cv2.imread("maps/map2.png"), cv2.COLOR_BGR2GRAY)
+    map_data = cv2.cvtColor(cv2.imread("maps/image.png"), cv2.COLOR_BGR2GRAY)
     image = np.zeros((250, 250))
     
     fig = plt.figure()
