@@ -37,7 +37,6 @@ class LandmarkMatcher:
                     elif self._landmarks[to_remove[0]][0].count == landmark.count and to_remove[1] > age:
                         to_remove = (i, age)
             if to_remove is not None:
-                print(self._landmarks, to_remove)
                 self._landmarks.pop(to_remove[0])            
         
         return match

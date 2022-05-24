@@ -194,8 +194,14 @@ def extract_features(ls, N=400, C=22, X=0.02, D=10, S=6):
             cartesian_sample_y[cartesian_sample_size] = y
             cartesian_sample_size += 1
             
-        A = np.vstack([cartesian_sample_x[:cartesian_sample_size], np.ones(cartesian_sample_size)]).T
-        (m, b), s = np.linalg.lstsq(A, cartesian_sample_y[:cartesian_sample_size], rcond=None)[:2]
+        if random.random() > 0.5:
+            A = np.vstack([cartesian_sample_x[:cartesian_sample_size], np.ones(cartesian_sample_size)]).T
+            (m, b), s = np.linalg.lstsq(A, cartesian_sample_y[:cartesian_sample_size], rcond=None)[:2]
+            t = 0
+        else:
+            A = np.vstack([cartesian_sample_y[:cartesian_sample_size], np.ones(cartesian_sample_size)]).T
+            (m, b), s = np.linalg.lstsq(A, cartesian_sample_x[:cartesian_sample_size], rcond=None)[:2]
+            t = 1
         if s / S > 1:
             continue
         
@@ -203,17 +209,23 @@ def extract_features(ls, N=400, C=22, X=0.02, D=10, S=6):
         d = 1 / pow(m*m + 1, 0.5)
         close_enough_size = 0
         for i, (x, y) in enumerate(cartesian):
-            if abs(m * x - y + b) * d < X:
-                close_enough[close_enough_size] = i
-                close_enough_size += 1
+            if t == 0:
+                if abs(m * x - y + b) * d < X:
+                    close_enough[close_enough_size] = i
+                    close_enough_size += 1
+            elif t == 1:
+                if abs(m * y - x + b) * d < X:
+                    close_enough[close_enough_size] = i
+                    close_enough_size += 1
         
         # If the number of points close to the line is above a threshold C
         if close_enough_size > C:
             # Calculate new least squares best fit line
-            A = np.vstack([[cartesian[i][0] for i in close_enough[:close_enough_size]], np.ones(close_enough_size)]).T
-            (a, c), s = np.linalg.lstsq(A, np.array([cartesian[i][1] for i in close_enough[:close_enough_size]]), rcond=None)[:2]
-            b = -1
-            if m > 10:
+            if t == 0:
+                A = np.vstack([[cartesian[i][0] for i in close_enough[:close_enough_size]], np.ones(close_enough_size)]).T
+                (a, c), s = np.linalg.lstsq(A, np.array([cartesian[i][1] for i in close_enough[:close_enough_size]]), rcond=None)[:2]
+                b = -1
+            else:
                 A = np.vstack([[cartesian[i][1] for i in close_enough[:close_enough_size]], np.ones(close_enough_size)]).T
                 (b, c), s = np.linalg.lstsq(A, np.array([cartesian[i][0] for i in close_enough[:close_enough_size]]), rcond=None)[:2]
                 a = -1
@@ -241,12 +253,9 @@ def extract_landmarks(ls, T=0.25, N=400, C=22, X=0.02, D=10, S=6):
         for i, (landmark, olds) in enumerate(landmarks):
             # Only add landmarks sufficiently far apart
             if np.linalg.norm(landmark.closest_point(0, 0, False) - lpos) < T:
-                landmarks.append((nlandmark, s))
-                break
-            else:
                 if s < olds:
                     landmarks[i] = (nlandmark, s)
-                    break
+                break
         else:
             landmarks.append((nlandmark, s))
     return [l[0]for l in landmarks]

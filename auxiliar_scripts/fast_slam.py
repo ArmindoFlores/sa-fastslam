@@ -146,13 +146,13 @@ def update(n, state):
             "ranges": laser_data,
             "angle_increment": 2 * np.pi / 360,
             "angle_min":0 
-        }, 20, X=10)
+        }, 20, X=5)
         state["matches"] = []
         for landmark in map(lambda l: transform_landmark(l, 250-state["pos"], np.identity(2)), landmarks):
             match = state["matcher"].observe(landmark)
             if match is not None:
                 state["matches"].append(match)
-        
+        print(len(state["matches"]))
     return update_display(state)
 
 def main():
@@ -178,9 +178,9 @@ def main():
     
     state = {
         "velocity": 0.5,
-        "pos": np.array(image.shape) / 2 - 50,
-        "pos_guess": np.array(image.shape) / 2 - 50,
-        "destination": np.array(image.shape) / 2 - 50,
+        "pos": np.array(image.shape) / 2 + 100,
+        "pos_guess": np.array(image.shape) / 2 + 100,
+        "destination": np.array(image.shape) / 2 + 100,
         "my_pos": my_pos,
         "my_pos_guess": my_pos_guess,
         "dst_pos": dst_pos,
@@ -189,7 +189,7 @@ def main():
         "last_ls": image,
         "update_ls": False,
         "ax": ax1,
-        "matcher": landmark_matching.LandmarkMatcher(distance_threshold=15),
+        "matcher": landmark_matching.LandmarkMatcher(8, 12, 10),
         "matches": [],
         "landmarks": [],
     }
