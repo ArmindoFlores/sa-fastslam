@@ -100,10 +100,16 @@ def update_display(state):
         result.append(state["ls_img"])
         
     for i, landmark in enumerate(state["matcher"].valid_landmarks):
-        if len(state["landmarks"]) > i:
-            state["landmarks"][i].set_data([250 - landmark.start[1], 250 - landmark.end[1]], [250 - landmark.start[0], 250 - landmark.end[0]])
+        if landmark.equation[1] != 0:
+            start = 0, -landmark.equation[2] / landmark.equation[1]
+            end = 250, -landmark.equation[0] / landmark.equation[1] * 250 + start[1]
         else:
-            state["landmarks"].append(state["ax"].plot([250 - landmark.start[1], 250 - landmark.end[1]], [250 - landmark.start[0], 250 - landmark.end[0]], color="green")[0])
+            start = -landmark.equation[2] / landmark.equation[0], 0
+            end = -landmark.equation[1] / landmark.equation[0] * 250 + start[0], 250
+        if len(state["landmarks"]) > i:
+            state["landmarks"][i].set_data([250 - start[1], 250 - end[1]], [250 - start[0], 250 - end[0]])
+        else:
+            state["landmarks"].append(state["ax"].plot([250 - start[1], 250 - end[1]], [250 - start[0], 250 - end[0]], color="green")[0])
     result += state["landmarks"]
         
     return result
@@ -152,7 +158,8 @@ def update(n, state):
             match = state["matcher"].observe(landmark)
             if match is not None:
                 state["matches"].append(match)
-        print(len(state["matches"]))
+        print(f"Matches: {len(state['matches'])}/{len(state['matcher'].valid_landmarks)}")
+        
     return update_display(state)
 
 def main():
@@ -164,7 +171,7 @@ def main():
     ax1 = fig.add_subplot(121)
     ax2 = fig.add_subplot(122)
     
-    ax1.imshow(255 - map_data, cmap="Greys")
+    ax1.imshow(255 - map_data, cmap="Greys", interpolation="bilinear")
     ls_img = ax2.imshow(image, cmap="Greys", interpolation="nearest")
     
     my_pos, = ax1.plot([], [], "ro", markersize=3)

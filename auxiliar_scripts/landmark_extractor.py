@@ -58,8 +58,8 @@ class Landmark:
     def closest_point(self, x, y, check_bounds=True):
         """Compute the closest point on the line to (`x`, `y`)"""
         p = np.array(closest_to_line(x, y, *self._equation))
-        if not check_bounds:
-            return p
+        # if not check_bounds:
+        return p
         d1, d2 = distance_on_line(p, self.start, self.end)
         if np.sign(d1) != np.sign(d2):
             return p
@@ -69,7 +69,10 @@ class Landmark:
     
     def distance(self, other, pos=(0, 0)):
         """A measure of how different two landmarks are"""
-        return np.linalg.norm(self.closest_point(*pos) - other.closest_point(*pos))
+        if self.equation[1] != 0 and other.equation[1] != 0:
+            return pow((self.equation[0] / self.equation[1] - other.equation[0] / other.equation[1]) ** 2 + (self.equation[2] / self.equation[1] - other.equation[2] / other.equation[1]) , 0.5)
+        elif self.equation[0] != 0 and other.equation[0] != 0:
+            return pow((self.equation[1] / self.equation[0] - other.equation[1] / other.equation[0]) ** 2 + (self.equation[2] / self.equation[0] - other.equation[2] / other.equation[0]) , 0.5)
 
     def intersects(self, other, threshold=0.3):
         """Check if this landmark intersects with `other`."""
@@ -253,9 +256,14 @@ def extract_landmarks(ls, T=0.25, N=400, C=22, X=0.02, D=10, S=6):
         for i, (landmark, olds) in enumerate(landmarks):
             # Only add landmarks sufficiently far apart
             if np.linalg.norm(landmark.closest_point(0, 0, False) - lpos) < T:
+            # if landmark.distance(nlandmark) < T * 10:
+                landmarks.append((nlandmark, s))
+                break
+            else:
                 if s < olds:
                     landmarks[i] = (nlandmark, s)
                 break
         else:
             landmarks.append((nlandmark, s))
+    print(f"Seen landmarks: {len(landmarks)}")
     return [l[0]for l in landmarks]
