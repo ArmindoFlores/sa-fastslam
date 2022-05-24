@@ -1,5 +1,6 @@
 import math
 import random
+from re import L
 
 import numpy as np
 
@@ -17,43 +18,49 @@ class Landmark:
     """This class represents a landmark in the robot's environment.
     A landmark is a line described by `ax + by + c = 0`.
     """
-    __slots__ = ("_equation", "_start", "_end", "_count")
+    __slots__ = ("_equation", "_start", "_end", "_count", "_r2")
     
-    def __init__(self, a, b, c, start, end):
+    def __init__(self, a, b, c, start, end, r2=0):
         """Instantiate a new Landmark object, representing a line described by `ax + by + c = 0`, starting at `start` and ending at `end`."""
         self._equation = np.array((a, b, c))
         self._start = np.array(start)
         self._end = np.array(end)
         self._count = 1
+        self._r2 = r2
     
     def update(self, other):
         """Update the landmark's parameters using a new observation"""
-        assert self.equation[0] * other.equation[0] + self.equation[1] * other.equation[1] != 0
+        # assert self.equation[0] * other.equation[0] + self.equation[1] * other.equation[1] != 0
         
-        if self.y_defined and other.y_defined or self.x_defined and other.x_defined:
-            self._equation = (self._equation * self._count + other.equation * other.count) / (self._count + other.count)
-        elif self.y_defined:
-            print("!!!")
-            a, b, c = other.equation
-            self._equation = (self._equation * self._count + np.array((1/b, -1, -c/b)) * other.count) / (self._count + other.count)
-        else:
-            print("!!!")
-            a, b, c = other.equation
-            self._equation = (self._equation * self._count + np.array((-1, 1/a, -c/a)) * other.count) / (self._count + other.count)
+        if self._r2 < other._r2:
+            self._equation = other.equation
+            self._start = other._start
+            self._end = other._end
+
+        # if self.y_defined and other.y_defined or self.x_defined and other.x_defined:
+        #     self._equation = (self._equation * self._count + other.equation * other.count) / (self._count + other.count)
+        # elif self.y_defined:
+        #     print("!!!")
+        #     a, b, c = other.equation
+        #     self._equation = (self._equation * self._count + np.array((1/b, -1, -c/b)) * other.count) / (self._count + other.count)
+        # else:
+        #     print("!!!")
+        #     a, b, c = other.equation
+        #     self._equation = (self._equation * self._count + np.array((-1, 1/a, -c/a)) * other.count) / (self._count + other.count)
         
         self._count += other.count
-        other_start = self.closest_point(*other.start, False)
-        other_end = self.closest_point(*other.end, False)
-        if self.y_defined:
-            if other_start[0] < self._start[0]:
-                self._start = other_start
-            if other_end[0] > self._end[0]:
-                self._end = other_end
-        elif self.x_defined:
-            if other_start[1] < self._start[1]:
-                self._start = other_start
-            if other_end[1] > self._end[1]:
-                self._end = other_end
+        # other_start = self.closest_point(*other.start, False)
+        # other_end = self.closest_point(*other.end, False)
+        # if self.y_defined:
+        #     if other_start[0] < self._start[0]:
+        #         self._start = other_start
+        #     if other_end[0] > self._end[0]:
+        #         self._end = other_end
+        # elif self.x_defined:
+        #     if other_start[1] < self._start[1]:
+        #         self._start = other_start
+        #     if other_end[1] > self._end[1]:
+        #         self._end = other_end
         
     def closest_point(self, x, y, check_bounds=True):
         """Compute the closest point on the line to (`x`, `y`)"""
@@ -199,19 +206,20 @@ def extract_features(ls, N=400, C=22, X=0.02, D=10, S=6):
             
         if random.random() > 0.5:
             A = np.vstack([cartesian_sample_x[:cartesian_sample_size], np.ones(cartesian_sample_size)]).T
-            (m, b), s = np.linalg.lstsq(A, cartesian_sample_y[:cartesian_sample_size], rcond=None)[:2]
+            (m, b), _ = np.linalg.lstsq(A, cartesian_sample_y[:cartesian_sample_size], rcond=None)[:2]
             t = 0
         else:
             A = np.vstack([cartesian_sample_y[:cartesian_sample_size], np.ones(cartesian_sample_size)]).T
-            (m, b), s = np.linalg.lstsq(A, cartesian_sample_x[:cartesian_sample_size], rcond=None)[:2]
+            (m, b), _ = np.linalg.lstsq(A, cartesian_sample_x[:cartesian_sample_size], rcond=None)[:2]
             t = 1
-        if s / S > 1:
-            continue
         
         # Find all readings within X meters of the line
         d = 1 / pow(m*m + 1, 0.5)
         close_enough_size = 0
         for i, (x, y) in enumerate(cartesian):
+            # Remove invalid points
+            if ls["ranges"][i] < 0.01:
+                continue
             if t == 0:
                 if abs(m * x - y + b) * d < X:
                     close_enough[close_enough_size] = i
@@ -225,19 +233,26 @@ def extract_features(ls, N=400, C=22, X=0.02, D=10, S=6):
         if close_enough_size > C:
             # Calculate new least squares best fit line
             if t == 0:
-                A = np.vstack([[cartesian[i][0] for i in close_enough[:close_enough_size]], np.ones(close_enough_size)]).T
-                (a, c), s = np.linalg.lstsq(A, np.array([cartesian[i][1] for i in close_enough[:close_enough_size]]), rcond=None)[:2]
+                xx = np.array([cartesian[i][0] for i in close_enough[:close_enough_size]])
+                yy = np.array([cartesian[i][1] for i in close_enough[:close_enough_size]])
+                A = np.vstack([xx, np.ones(close_enough_size)]).T
+                (a, c), residual = np.linalg.lstsq(A, yy, rcond=None)[:2]
                 b = -1
+                r2 = 1 - float(residual / (yy.size * yy.var()))
             else:
-                A = np.vstack([[cartesian[i][1] for i in close_enough[:close_enough_size]], np.ones(close_enough_size)]).T
-                (b, c), s = np.linalg.lstsq(A, np.array([cartesian[i][0] for i in close_enough[:close_enough_size]]), rcond=None)[:2]
+                xx = np.array([cartesian[i][1] for i in close_enough[:close_enough_size]])
+                yy = np.array([cartesian[i][0] for i in close_enough[:close_enough_size]])
+                A = np.vstack([xx, np.ones(close_enough_size)]).T
+                (b, c), residual = np.linalg.lstsq(A, yy, rcond=None)[:2]
                 a = -1
+                r2 = 1 - float(residual / (yy.size * yy.var()))
             
-            if s[0] / close_enough_size > 10:
+            #print(a, b, c, r2)
+            if r2 < 0.9:
                 continue
             
             line_points = sorted((closest_to_line(*cartesian[i], a, b, c) for i in close_enough[:close_enough_size]), key=lambda i: i[0])
-            features.append((a, b, c, (line_points[0], line_points[-1]), s[0] / close_enough_size))
+            features.append((a, b, c, (line_points[0], line_points[-1]), r2))
             
             for point in close_enough[:close_enough_size]:
                 try:
@@ -250,20 +265,18 @@ def extract_landmarks(ls, T=0.25, N=400, C=22, X=0.02, D=10, S=6):
     """Extract a list of landmarks from a laser scan `ls`"""
     features = extract_features(ls, N=N, C=C, X=X, D=D, S=S)
     landmarks = []
-    for a, b, c, (start, end), s in features:
-        nlandmark = Landmark(a, b, c, start, end)
+    for a, b, c, (start, end), r2 in features:
+        nlandmark = Landmark(a, b, c, start, end, r2)
         lpos = nlandmark.closest_point(0, 0, False)
-        for i, (landmark, olds) in enumerate(landmarks):
+        for i, (landmark, oldr2) in enumerate(landmarks):
             # Only add landmarks sufficiently far apart
             if np.linalg.norm(landmark.closest_point(0, 0, False) - lpos) < T:
-            # if landmark.distance(nlandmark) < T * 10:
-                landmarks.append((nlandmark, s))
-                break
-            else:
-                if s < olds:
-                    landmarks[i] = (nlandmark, s)
+                if r2 > oldr2:
+                    landmarks[i] = (nlandmark, r2)
                 break
         else:
-            landmarks.append((nlandmark, s))
+            landmarks.append((nlandmark, r2))
     print(f"Seen landmarks: {len(landmarks)}")
+    for l in landmarks:
+        print(l[1])
     return [l[0]for l in landmarks]

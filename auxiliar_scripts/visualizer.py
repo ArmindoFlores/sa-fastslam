@@ -27,7 +27,7 @@ def transform_landmark(landmark, position, rotmat):
         a = -1
         b = v[0] / v[1]
         c = start[0] - b * start[1]
-    return landmark_extractor.Landmark(a, b, c, start, end)
+    return landmark_extractor.Landmark(a, b, c, start, end, landmark._r2)
 
 def main(t="ls", save=False):
     global positions

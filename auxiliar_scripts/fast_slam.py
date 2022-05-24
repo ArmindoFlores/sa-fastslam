@@ -26,7 +26,7 @@ def transform_landmark(landmark, position, rotmat):
         a = -1
         b = v[0] / v[1]
         c = start[0] - b * start[1]
-    return landmark_extractor.Landmark(a, b, c, start, end)
+    return landmark_extractor.Landmark(a, b, c, start, end, landmark._r2)
 
 def get_timestamp(filename, prefix):
     return float(".".join(os.path.basename(filename).split(".")[:-1])[len(prefix):])
@@ -120,6 +120,8 @@ def goes_through_wall(p1, p2, map_info):
     while np.any(p.astype(np.int32) != p2.astype(np.int32)):
         p += v
         asint = p.astype(np.int32)
+        if not (0 < asint[0] < map_info.shape[0] and 0 < asint[1] < map_info.shape[1]):
+            return False
         if map_info[asint[0]][asint[1]] == 0:
             return True
     return False
@@ -132,10 +134,7 @@ def update(n, state):
                 break
         state["velocity"] = (np.random.random() + 0.5) * 0.1
     
-    if n > 1000:
-        real_movement = normalize(state["destination"] - state["pos"]) *  state["velocity"]
-    else:
-        real_movement = np.array([0, 0])
+    real_movement = normalize(state["destination"] - state["pos"]) *  state["velocity"]
     state["pos"] += real_movement
     
     odom_data = generate_odometry_data(real_movement)
@@ -152,7 +151,7 @@ def update(n, state):
             "ranges": laser_data,
             "angle_increment": 2 * np.pi / 360,
             "angle_min":0 
-        }, 20, X=5)
+        }, 20, C=25, X=3)
         state["matches"] = []
         for landmark in map(lambda l: transform_landmark(l, 250-state["pos"], np.identity(2)), landmarks):
             match = state["matcher"].observe(landmark)
@@ -164,7 +163,7 @@ def update(n, state):
 
 def main():
     np.random.seed(int(time.time() * 13) % 2**32)
-    map_data = cv2.cvtColor(cv2.imread("maps/map1.png"), cv2.COLOR_BGR2GRAY)
+    map_data = cv2.cvtColor(cv2.imread("maps/map2.png"), cv2.COLOR_BGR2GRAY)
     image = np.zeros((250, 250))
     
     fig = plt.figure()
@@ -185,9 +184,9 @@ def main():
     
     state = {
         "velocity": 0.5,
-        "pos": np.array(image.shape) / 2 + 100,
-        "pos_guess": np.array(image.shape) / 2 + 100,
-        "destination": np.array(image.shape) / 2 + 100,
+        "pos": np.array(image.shape) / 2,
+        "pos_guess": np.array(image.shape) / 2,
+        "destination": np.array(image.shape) / 2,
         "my_pos": my_pos,
         "my_pos_guess": my_pos_guess,
         "dst_pos": dst_pos,
@@ -201,7 +200,7 @@ def main():
         "landmarks": [],
     }
     
-    
+    print("Starting")
     animation.FuncAnimation(fig, lambda n: update(n, state), None, interval=15, blit=True)
     plt.show()
         
