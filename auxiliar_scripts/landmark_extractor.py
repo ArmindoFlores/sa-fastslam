@@ -193,6 +193,7 @@ def extract_features(ls, N=400, C=22, X=0.02, D=10, S=6):
         
         if total_size < S:
             continue
+        
         sample = random.sample(total[:total_size], S)
         sample.append(R)
         
@@ -204,55 +205,85 @@ def extract_features(ls, N=400, C=22, X=0.02, D=10, S=6):
             cartesian_sample_y[cartesian_sample_size] = y
             cartesian_sample_size += 1
             
-        if random.random() > 0.5:
-            A = np.vstack([cartesian_sample_x[:cartesian_sample_size], np.ones(cartesian_sample_size)]).T
-            (m, b), _ = np.linalg.lstsq(A, cartesian_sample_y[:cartesian_sample_size], rcond=None)[:2]
-            t = 0
+        representation_type = None
+        
+        # Choose a random angle
+        theta = random.random() * 2 * np.pi
+        
+        # Initialize rotation matrices for theta and -theta
+        rotation_matrix = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+        inverse_rotation_matrix = np.array([[np.cos(-theta), -np.sin(-theta)], [np.sin(-theta), np.cos(-theta)]])
+            
+        # Rotate points by theta and fit a line through them
+        points = np.array([point for point in zip(cartesian_sample_x[:cartesian_sample_size], cartesian_sample_y[:cartesian_sample_size])])
+        points_transformed = [np.dot(rotation_matrix, points[i]) for i in range(len(points))]
+        xl, yl = tuple(zip(*points_transformed))
+        A = np.vstack([xl, np.ones(cartesian_sample_size)]).T
+        (m, o), _ = np.linalg.lstsq(A, yl, rcond=None)[:2]
+        p_start = np.dot(inverse_rotation_matrix, np.array([0, o]))
+        p_end = np.dot(inverse_rotation_matrix, np.array([1, m + o]))
+        if p_start[0] - p_end[0] != 0:
+            m = (p_start[1] - p_end[1]) / (p_start[0] - p_end[0])
+            representation_type = "y(x)"
         else:
-            A = np.vstack([cartesian_sample_y[:cartesian_sample_size], np.ones(cartesian_sample_size)]).T
-            (m, b), _ = np.linalg.lstsq(A, cartesian_sample_x[:cartesian_sample_size], rcond=None)[:2]
-            t = 1
+            m = (p_start[0] - p_end[0]) / (p_start[1] - p_end[1])
+            representation_type = "x(y)"
+        o = p_start[1] - m * p_start[0]
         
         # Find all readings within X meters of the line
-        d = 1 / pow(m*m + 1, 0.5)
+        denominator = 1 / pow(m*m + 1, 0.5)
         close_enough_size = 0
         for i, (x, y) in enumerate(cartesian):
             # Remove invalid points
             if ls["ranges"][i] < 0.01:
                 continue
-            if t == 0:
-                if abs(m * x - y + b) * d < X:
-                    close_enough[close_enough_size] = i
-                    close_enough_size += 1
-            elif t == 1:
-                if abs(m * y - x + b) * d < X:
-                    close_enough[close_enough_size] = i
-                    close_enough_size += 1
+            if representation_type == "y(x)":
+                distance = abs(m * x - y + o) * denominator
+            else:
+                distance = abs(m * y - x + o) * denominator
+            if distance < X:
+                close_enough[close_enough_size] = i
+                close_enough_size += 1
         
         # If the number of points close to the line is above a threshold C
         if close_enough_size > C:
-            # Calculate new least squares best fit line
-            if t == 0:
-                xx = np.array([cartesian[i][0] for i in close_enough[:close_enough_size]])
-                yy = np.array([cartesian[i][1] for i in close_enough[:close_enough_size]])
-                A = np.vstack([xx, np.ones(close_enough_size)]).T
-                (a, c), residual = np.linalg.lstsq(A, yy, rcond=None)[:2]
-                b = -1
-                r2 = 1 - float(residual / (yy.size * yy.var()))
-            else:
-                xx = np.array([cartesian[i][1] for i in close_enough[:close_enough_size]])
-                yy = np.array([cartesian[i][0] for i in close_enough[:close_enough_size]])
-                A = np.vstack([xx, np.ones(close_enough_size)]).T
-                (b, c), residual = np.linalg.lstsq(A, yy, rcond=None)[:2]
-                a = -1
-                r2 = 1 - float(residual / (yy.size * yy.var()))
+            xx = np.array([cartesian[i][0] for i in close_enough[:close_enough_size]])
+            yy = np.array([cartesian[i][1] for i in close_enough[:close_enough_size]])
             
-            #print(a, b, c, r2)
+            # Rotate points by the same matrix as before
+            points = np.array([point for point in zip(xx, yy)])
+            points_transformed = [np.dot(rotation_matrix, points[i]) for i in range(len(points))]
+            xl, yl = tuple(zip(*points_transformed))
+            
+            # Calculate new least squares best fit line
+            A = np.vstack([xl, np.ones(close_enough_size)]).T
+            (m, o), residual = np.linalg.lstsq(A, yl, rcond=None)[:2]
+            r2 = 1 - float(residual / (len(yy) * np.var(yl)))
+            
+            # Discard poorly fitted lines
             if r2 < 0.9:
                 continue
             
-            line_points = sorted((closest_to_line(*cartesian[i], a, b, c) for i in close_enough[:close_enough_size]), key=lambda i: i[0])
-            features.append((a, b, c, (line_points[0], line_points[-1]), r2))
+            # Transform points back into original reference frame
+            p_start = np.dot(inverse_rotation_matrix, np.array([0, o]))
+            p_end = np.dot(inverse_rotation_matrix, np.array([1, m + o]))
+            if p_start[0] - p_end[0] != 0:
+                m = (p_start[1] - p_end[1]) / (p_start[0] - p_end[0])
+                representation_type = "y(x)"
+            else:
+                m = (p_start[0] - p_end[0]) / (p_start[1] - p_end[1])
+                representation_type = "x(y)"
+            o = p_start[1] - m * p_start[0]
+            if representation_type == "y(x)":
+                a = m
+                b = -1
+                c = o
+            else:
+                a = -1
+                b = m
+                c = o
+                 
+            features.append((a, b, c, (p_start, p_end), r2))
             
             for point in close_enough[:close_enough_size]:
                 try:
