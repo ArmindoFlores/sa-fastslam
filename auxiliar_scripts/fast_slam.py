@@ -163,7 +163,7 @@ def update(n, state):
 
 def main():
     np.random.seed(int(time.time() * 13) % 2**32)
-    map_data = cv2.cvtColor(cv2.imread("maps/image.png"), cv2.COLOR_BGR2GRAY)
+    map_data = cv2.cvtColor(cv2.imread("maps/map1.png"), cv2.COLOR_BGR2GRAY)
     image = np.zeros((250, 250))
     
     fig = plt.figure()
