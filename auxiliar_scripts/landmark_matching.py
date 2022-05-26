@@ -1,6 +1,8 @@
 import numpy as np
 import time
 
+import landmark_extractor
+
 LANDMARK_VAR = 0.05
 
 
@@ -31,17 +33,24 @@ class LandmarkMatcher:
             new_landmark_matcher._landmarks.append([copy_landmark, t, KalmanFilter(copy_landmark, ekf.covariance, ekf.R)])
         return new_landmark_matcher
         
-    def observe(self, landmark, H):
+    def observe(self, landmark, H, pose):
         closest = None
         match = None
+        
+        worldspace_landmark = landmark_extractor.Landmark(*landmark.equation, landmark.start, landmark.end, landmark._r2)
+        d, phi = landmark.params()
+        theta = phi + pose[2]
+        new_params = np.array([d + pose[0] * np.cos(theta) + pose[1] * np.sin(theta), theta])
+        worldspace_landmark.update_params(new_params - np.array([d, phi]))
+        
         for i, (glandmark, _, ekf) in enumerate(self._landmarks):
             # Compute the distance between projections on both landmarks
-            ld = np.linalg.norm(landmark.closest_point(0, 0) - glandmark.closest_point(0, 0))
+            ld = np.linalg.norm(worldspace_landmark.closest_point(*pose[:2]) - glandmark.closest_point(*pose[:2]))
             if ld < self.distance_threshold and (closest is None or ld < closest["difference"]):
                 closest = {"difference": ld, "landmark": glandmark, "filter": ekf}
         if closest is not None:
             # Found a match
-            closest["filter"].update(landmark.params(), closest["landmark"].params(), H)
+            closest["filter"].update(new_params, closest["landmark"].params(), H)
             closest["landmark"].count += 1
             self._landmarks[i][1] = time.time()
             
@@ -49,7 +58,8 @@ class LandmarkMatcher:
             if closest["landmark"].count >= self.minimum_observations:
                 match = closest["landmark"]
         else:
-            self._landmarks.append([landmark.copy(), time.time(), KalmanFilter(landmark, self.R, self.R)])
+            cp = worldspace_landmark.copy()
+            self._landmarks.append([cp, time.time(), KalmanFilter(cp, self.R, self.R)])
             # self._landmarks.append([landmark, time.time()]) 
         
         # Remove oldest lowest-seen invalid landmark

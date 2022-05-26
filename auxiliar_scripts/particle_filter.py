@@ -14,7 +14,7 @@ class Particle:
         else:
             self.pose = np.array(pose, dtype=np.float64)
         self.weight = 1
-        self.landmark_matcher = landmark_matching.LandmarkMatcher(distance_threshold=10, max_invalid_landmarks=15)
+        self.landmark_matcher = landmark_matching.LandmarkMatcher(distance_threshold=20, max_invalid_landmarks=15)
         
     def __repr__(self):
         return f"<Particle pose={tuple(np.round(self.pose, 3))} weight={round(self.weight, 3)}>"
@@ -23,7 +23,7 @@ class Particle:
         """Try to match an observed landmark to list of previously seen ones and update its location 
         estimate and the particle's weight.
         """
-        match = self.landmark_matcher.observe(landmark, H_func(*self.pose))
+        match = self.landmark_matcher.observe(landmark, H_func(*self.pose), self.pose)
         if match is not None:
             self.weigh(landmark.params(), match, H_func(*self.pose), covariance, Qt)
     
@@ -81,7 +81,9 @@ class ParticleFilter:
         n2 = N - n1
         total_weight = sum((particle.weight for particle in self.particles))
         print(total_weight)
-        if total_weight == 0:
+        # if total_weight > self.N / 2:
+        #     return
+        if total_weight == 0 or np.isnan(total_weight):
             for particle in self.particles:
                 particle.set_weight(1)
             return

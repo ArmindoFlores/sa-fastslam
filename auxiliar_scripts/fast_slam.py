@@ -92,18 +92,18 @@ def update_display(state):
         state["ls_img"].set_clim(state["last_ls"].min(), state["last_ls"].max())
         result.append(state["ls_img"])
         
-    # for i, landmark in enumerate(state["matcher"].valid_landmarks):
-    #     if landmark.equation[1] != 0:
-    #         start = 0, -landmark.equation[2] / landmark.equation[1]
-    #         end = 250, -landmark.equation[0] / landmark.equation[1] * 250 + start[1]
-    #     else:
-    #         start = -landmark.equation[2] / landmark.equation[0], 0
-    #         end = -landmark.equation[1] / landmark.equation[0] * 250 + start[0], 250
-    #     if len(state["landmarks"]) > i:
-    #         state["landmarks"][i].set_data([250 - start[1], 250 - end[1]], [250 - start[0], 250 - end[0]])
-    #     else:
-    #         state["landmarks"].append(state["ax"].plot([250 - start[1], 250 - end[1]], [250 - start[0], 250 - end[0]], color="green")[0])
-    # result += state["landmarks"]
+    for i, landmark in enumerate(state["matches"]):
+        if landmark.equation[1] != 0:
+            start = 0, -landmark.equation[2] / landmark.equation[1]
+            end = 250, -landmark.equation[0] / landmark.equation[1] * 250 + start[1]
+        else:
+            start = -landmark.equation[2] / landmark.equation[0], 0
+            end = -landmark.equation[1] / landmark.equation[0] * 250 + start[0], 250
+        if len(state["landmarks"]) > i:
+            state["landmarks"][i].set_data([250 - start[1], 250 - end[1]], [250 - start[0], 250 - end[0]])
+        else:
+            state["landmarks"].append(state["ax"].plot([250 - start[1], 250 - end[1]], [250 - start[0], 250 - end[0]], color="green")[0])
+    result += state["landmarks"]
     
     for i, particle in enumerate(state["particle_filter"].particles):
         # print("Particle", i, particle.pose)
@@ -138,12 +138,13 @@ def update(n, state):
     # Generate laser and odometry data based on the real movement
     odom_data = generate_odometry_data(real_movement)
     laser_data = None
-    if n % 50 == 0:
+    if n % 25 == 0:
         # Only generate laser data every 50 frames
         laser_data = generate_laser_data(state)
         
     # Update our particle filter  
     state["particle_filter"].sample_pose(odom_data, (ODOM_SIGMA*2)**2 * np.ones(3))
+    # state["particle_filter"].sample_pose((*real_movement, 0), np.zeros(3))
     if laser_data is not None:
         state["update_ls"] = True
         laser_data_to_plot(laser_data, state["last_ls"], 1, np.array(state["last_ls"].shape) / 2)
@@ -153,8 +154,17 @@ def update(n, state):
             "angle_min":0 
         }, 20, C=50, X=3)
         state["matches"] = []
-        state["particle_filter"].observe_landmarks(landmarks, H, (LASER_SIGMA * 3) ** 2 * np.identity(2), .1)
-        state["particle_filter"].resample(frac=0.9)
+        state["particle_filter"].observe_landmarks(landmarks, H, (LASER_SIGMA) ** 2 * np.identity(2), 0.1)
+        best_particle = None
+        for particle in state["particle_filter"].particles:
+            if best_particle is None or particle.weight > best_particle.weight:
+                best_particle = particle
+        state["matches"] = best_particle.landmark_matcher.valid_landmarks
+        print("\n".join(map(str, best_particle.landmark_matcher.valid_landmarks)))
+        print("Mapped landmarks:", len(best_particle.landmark_matcher.valid_landmarks))
+        
+        state["particle_filter"].resample(frac=0.8)
+            
         # for landmark in map(lambda l: transform_landmark(l, 250-state["pos"], np.identity(2)), landmarks):
         #     match = state["matcher"].observe(landmark)
         #     if match is not None:
@@ -197,12 +207,14 @@ def main():
         "last_ls": image,
         "update_ls": False,
         "ax": ax1,
-        "particle_filter": particle_filter.ParticleFilter(50, (*(np.array(image.shape) / 2), 0)),
-        "particles": []
+        "particle_filter": particle_filter.ParticleFilter(150, (*(np.array(image.shape) / 2), 0)),
+        "particles": [],
+        "matches": [],
+        "landmarks": []
     }
     
     for _ in state["particle_filter"].particles:
-        p, = ax1.plot([], [], "go", markersize=3)
+        p, = ax1.plot([], [], "go", markersize=3, alpha=.1)
         state["particles"].append(p)
     
     animation.FuncAnimation(fig, lambda n: update(n, state), None, interval=15, blit=True)

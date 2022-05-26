@@ -24,7 +24,7 @@ class Landmark:
         self._r2 = r2
         
     def __repr__(self):
-        return f"<Landmark (({round(self._equation[0], 2)}x) + ({round(self._equation[1], 2)}y) + ({round(self._equation[2], 2)})) c={self.count}"
+        return f"<Landmark {np.round(self.params(), 3)} c={self.count}>"
     
     def copy(self):
         new_landmark = Landmark(*self.equation, self._start, self._end, self._r2)
