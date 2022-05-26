@@ -24,6 +24,13 @@ class LandmarkMatcher:
         self.max_invalid_landmarks = max_invalid_landmarks
         self.R = LANDMARK_VAR * np.identity(2)
         
+    def copy(self):
+        new_landmark_matcher = LandmarkMatcher(self.minimum_observations, self.distance_threshold, self.max_invalid_landmarks)
+        for landmark, t, ekf in self._landmarks:
+            copy_landmark = landmark.copy()
+            new_landmark_matcher._landmarks.append([copy_landmark, t, KalmanFilter(copy_landmark, ekf.covariance, ekf.R)])
+        return new_landmark_matcher
+        
     def observe(self, landmark, H):
         closest = None
         match = None
@@ -35,13 +42,14 @@ class LandmarkMatcher:
         if closest is not None:
             # Found a match
             closest["filter"].update(landmark.params(), closest["landmark"].params(), H)
+            closest["landmark"].count += 1
             self._landmarks[i][1] = time.time()
             
             # closest["landmark"].update(landmark)
             if closest["landmark"].count >= self.minimum_observations:
                 match = closest["landmark"]
         else:
-            self._landmarks.append([landmark, time.time(), KalmanFilter(landmark, self.R, self.R)])
+            self._landmarks.append([landmark.copy(), time.time(), KalmanFilter(landmark, self.R, self.R)])
             # self._landmarks.append([landmark, time.time()]) 
         
         # Remove oldest lowest-seen invalid landmark

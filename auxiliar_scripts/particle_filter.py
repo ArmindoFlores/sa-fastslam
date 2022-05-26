@@ -25,7 +25,7 @@ class Particle:
         """
         match = self.landmark_matcher.observe(landmark, H_func(*self.pose))
         if match is not None:
-            self.weigh(landmark.equation, match, H_func(*self.pose), covariance, Qt)
+            self.weigh(landmark.params(), match, H_func(*self.pose), covariance, Qt)
     
     def set_weight(self, weight):
         """Set the particle's weight to `weight`."""
@@ -46,6 +46,11 @@ class Particle:
         Z = z_measured - z_predicted
         w = np.exp(-0.5 * Z.T.dot(np.linalg.inv(Q)).dot(Z)) / np.sqrt(np.linalg.det(2 * np.pi * Q))
         self.weight *= w
+        
+    def copy(self):
+        new_particle = Particle(self.pose.copy())
+        new_particle.landmark_matcher = self.landmark_matcher.copy()
+        return new_particle
 
 class ParticleFilter:
     """A class describing a particle filter."""
@@ -76,6 +81,11 @@ class ParticleFilter:
         n2 = N - n1
         total_weight = sum((particle.weight for particle in self.particles))
         print(total_weight)
+        if total_weight == 0:
+            for particle in self.particles:
+                particle.set_weight(1)
+            return
         normalized_weights = [particle.weight / total_weight for particle in self.particles]
         self.particles = list(np.random.choice(self.particles, n1, True, normalized_weights)) \
                        + list(np.random.choice(self.particles, n2, True)) 
+        self.particles = [particle.copy() for particle in self.particles]

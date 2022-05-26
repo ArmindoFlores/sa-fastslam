@@ -13,15 +13,23 @@ class Landmark:
     """This class represents a landmark in the robot's environment.
     A landmark is a line described by `ax + by + c = 0`.
     """
-    __slots__ = ("_equation", "_start", "_end", "_count", "_r2")
+    __slots__ = ("_equation", "_start", "_end", "count", "_r2")
     
     def __init__(self, a, b, c, start, end, r2=0):
         """Instantiate a new Landmark object, representing a line described by `ax + by + c = 0`, starting at `start` and ending at `end`."""
         self._equation = np.array((a, b, c))
         self._start = np.array(start)
         self._end = np.array(end)
-        self._count = 1
+        self.count = 1
         self._r2 = r2
+        
+    def __repr__(self):
+        return f"<Landmark (({round(self._equation[0], 2)}x) + ({round(self._equation[1], 2)}y) + ({round(self._equation[2], 2)})) c={self.count}"
+    
+    def copy(self):
+        new_landmark = Landmark(*self.equation, self._start, self._end, self._r2)
+        new_landmark.count = self.count
+        return new_landmark
     
     def update(self, other):
         """Update the landmark's parameters using a new observation"""
@@ -29,7 +37,7 @@ class Landmark:
             self._equation = other.equation
             self._start = other._start
             self._end = other._end
-        self._count += other.count
+        self.count += other.count
         
     def update_params(self, params):
         new_params = self.params() + params
@@ -85,11 +93,6 @@ class Landmark:
         d = r - pose[0] * np.cos(theta) - pose[1] * np.sin(theta)
         phi = theta - pose[2]
         return np.array([d, phi])
-    
-    @property
-    def count(self):
-        """How many times the landmark has been observed"""
-        return self._count
     
     @property
     def start(self):
@@ -257,6 +260,4 @@ def extract_landmarks(ls, T=0.25, N=400, C=22, X=0.02, D=10, S=6):
         else:
             landmarks.append((nlandmark, r2))
     print(f"Seen landmarks: {len(landmarks)}")
-    for l in landmarks:
-        print(l[1])
     return [l[0]for l in landmarks]

@@ -107,7 +107,7 @@ def update_display(state):
     
     for i, particle in enumerate(state["particle_filter"].particles):
         # print("Particle", i, particle.pose)
-        state["particles"][i].set_data(*particle.pose[:2])
+        state["particles"][i].set_data([particle.pose[1], particle.pose[0]])
     result += state["particles"]
         
     return result
@@ -143,7 +143,7 @@ def update(n, state):
         laser_data = generate_laser_data(state)
         
     # Update our particle filter  
-    state["particle_filter"].sample_pose(odom_data, ODOM_SIGMA**2 * np.ones(3))
+    state["particle_filter"].sample_pose(odom_data, (ODOM_SIGMA*2)**2 * np.ones(3))
     if laser_data is not None:
         state["update_ls"] = True
         laser_data_to_plot(laser_data, state["last_ls"], 1, np.array(state["last_ls"].shape) / 2)
@@ -153,8 +153,8 @@ def update(n, state):
             "angle_min":0 
         }, 20, C=50, X=3)
         state["matches"] = []
-        state["particle_filter"].observe_landmarks(landmarks, H, (LASER_SIGMA * 1) ** 2 * np.identity(2), .01)
-        state["particle_filter"].resample(frac=0.2)
+        state["particle_filter"].observe_landmarks(landmarks, H, (LASER_SIGMA * 3) ** 2 * np.identity(2), .1)
+        state["particle_filter"].resample(frac=0.9)
         # for landmark in map(lambda l: transform_landmark(l, 250-state["pos"], np.identity(2)), landmarks):
         #     match = state["matcher"].observe(landmark)
         #     if match is not None:
@@ -197,7 +197,7 @@ def main():
         "last_ls": image,
         "update_ls": False,
         "ax": ax1,
-        "particle_filter": particle_filter.ParticleFilter(10, (*(np.array(image.shape) / 2), 0)),
+        "particle_filter": particle_filter.ParticleFilter(50, (*(np.array(image.shape) / 2), 0)),
         "particles": []
     }
     
