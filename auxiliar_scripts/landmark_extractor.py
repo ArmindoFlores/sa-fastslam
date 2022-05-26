@@ -31,7 +31,25 @@ class Landmark:
             self._end = other._end
         self._count += other.count
         
-    def closest_point(self, x, y, check_bounds=True):
+    def update_params(self, params):
+        new_params = self.params() + params
+        
+        sign = 1 if 0 <= new_params[1] < np.pi else -1
+        if not np.isclose(abs(new_params[1]), np.pi):
+            b = -1
+            a = b / np.tan(new_params[1])
+            c = sign * new_params[0] * np.sqrt(1 + a*a) 
+            self._start = np.array([0, c])
+            self._end = np.array([1, a + c])
+        else:
+            a = -1
+            b = a * np.tan(new_params[1])
+            c = sign * new_params[0] * np.sqrt(1 + b*b)
+            self._start = np.array([c, 0])
+            self._end = np.array([b + c, 1])
+        self._equation = np.array((a, b, c))
+        
+    def closest_point(self, x, y):
         """Compute the closest point on the line to (`x`, `y`)"""
         p = np.array(closest_to_line(x, y, *self._equation))
         return p
@@ -52,6 +70,21 @@ class Landmark:
         `array([a, b, c])
         """
         return self._equation
+    
+    def params(self, pose=None):
+        """Line defined an angle and a distance to point `pose`. Defaults to the world origin."""
+        if pose is None:
+            pose = (0, 0, 0)
+        
+        a, b, c = self.equation
+        if c != 0:
+            theta = np.arctan2(- b * c / (a**2 + b**2), - a * c / (a**2 + b**2))
+        else:
+            theta = np.arctan2(- b / (a**2 + b**2), - a / (a**2 + b**2))
+        r = abs(c) / np.sqrt(a**2 + b**2)
+        d = r - pose[0] * np.cos(theta) - pose[1] * np.sin(theta)
+        phi = theta - pose[2]
+        return np.array([d, phi])
     
     @property
     def count(self):
@@ -214,10 +247,10 @@ def extract_landmarks(ls, T=0.25, N=400, C=22, X=0.02, D=10, S=6):
     landmarks = []
     for a, b, c, (start, end), r2 in features:
         nlandmark = Landmark(a, b, c, start, end, r2)
-        lpos = nlandmark.closest_point(0, 0, False)
+        lpos = nlandmark.closest_point(0, 0)
         for i, (landmark, oldr2) in enumerate(landmarks):
             # Only add landmarks sufficiently far apart
-            if np.linalg.norm(landmark.closest_point(0, 0, False) - lpos) < T:
+            if np.linalg.norm(landmark.closest_point(0, 0) - lpos) < T:
                 if r2 > oldr2:
                     landmarks[i] = (nlandmark, r2)
                 break

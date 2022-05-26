@@ -8,11 +8,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import landmark_extractor
-import landmark_matching
+import particle_filter
 
-ODOM_SIGMA = .2
+ODOM_SIGMA = .1
 LASER_SIGMA = .2
 
+
+def H(xr, yr, tr):
+    return np.array([[1, xr * np.sin(tr) - yr * np.cos(tr)], [0, 1]])
 
 def transform_landmark(landmark, position, rotmat):
     start = position[:2] + np.dot(rotmat, -landmark.start)
@@ -31,17 +34,6 @@ def transform_landmark(landmark, position, rotmat):
 def get_timestamp(filename, prefix):
     return float(".".join(os.path.basename(filename).split(".")[:-1])[len(prefix):])
 
-def multivariate_gaussian(pos, mu, sigma):
-    n = mu.shape[0]
-    sigma_det = np.linalg.det(sigma)
-    sigma_inv = np.linalg.inv(sigma)
-    N = np.sqrt((2*np.pi)**n * sigma_det)
-    
-    # This einsum call calculates (x-mu)T.sigma-1.(x-mu) in a vectorized
-    # way across all the input variables.
-    fac = np.einsum('...k,kl,...l->...', pos-mu, sigma_inv, pos-mu)
-    return np.exp(-fac / 2) / N
-
 def euclidean_distance(x, y):
     return np.linalg.norm(x - y)
 
@@ -51,7 +43,7 @@ def normalize(v):
 def generate_odometry_data(real_movement):
     x = random.gauss(real_movement[0], ODOM_SIGMA)
     y = random.gauss(real_movement[1], ODOM_SIGMA)
-    return np.array((x, y))
+    return np.array((x, y, 0))
 
 def generate_laser_data(state, l=360, r=100):
     increment = 2 * np.pi / l
@@ -87,11 +79,12 @@ def laser_data_to_plot(data, img, scale, offset):
     return img
         
 def update_display(state):
-    result = [state["my_pos_guess"], state["my_pos"], state["dst_pos"]]
+    # result = [state["my_pos_guess"], state["my_pos"], state["dst_pos"]]
+    result = [state["my_pos"], state["dst_pos"]]
     
     state["my_pos"].set_data(state["pos"][1], state["pos"][0])
     state["dst_pos"].set_data(state["destination"][1], state["destination"][0])
-    state["my_pos_guess"].set_data(state["pos_guess"][1], state["pos_guess"][0])
+    # state["my_pos_guess"].set_data(state["pos_guess"][1], state["pos_guess"][0])
     
     if state["update_ls"]:
         state["update_ls"] = False
@@ -99,18 +92,23 @@ def update_display(state):
         state["ls_img"].set_clim(state["last_ls"].min(), state["last_ls"].max())
         result.append(state["ls_img"])
         
-    for i, landmark in enumerate(state["matcher"].valid_landmarks):
-        if landmark.equation[1] != 0:
-            start = 0, -landmark.equation[2] / landmark.equation[1]
-            end = 250, -landmark.equation[0] / landmark.equation[1] * 250 + start[1]
-        else:
-            start = -landmark.equation[2] / landmark.equation[0], 0
-            end = -landmark.equation[1] / landmark.equation[0] * 250 + start[0], 250
-        if len(state["landmarks"]) > i:
-            state["landmarks"][i].set_data([250 - start[1], 250 - end[1]], [250 - start[0], 250 - end[0]])
-        else:
-            state["landmarks"].append(state["ax"].plot([250 - start[1], 250 - end[1]], [250 - start[0], 250 - end[0]], color="green")[0])
-    result += state["landmarks"]
+    # for i, landmark in enumerate(state["matcher"].valid_landmarks):
+    #     if landmark.equation[1] != 0:
+    #         start = 0, -landmark.equation[2] / landmark.equation[1]
+    #         end = 250, -landmark.equation[0] / landmark.equation[1] * 250 + start[1]
+    #     else:
+    #         start = -landmark.equation[2] / landmark.equation[0], 0
+    #         end = -landmark.equation[1] / landmark.equation[0] * 250 + start[0], 250
+    #     if len(state["landmarks"]) > i:
+    #         state["landmarks"][i].set_data([250 - start[1], 250 - end[1]], [250 - start[0], 250 - end[0]])
+    #     else:
+    #         state["landmarks"].append(state["ax"].plot([250 - start[1], 250 - end[1]], [250 - start[0], 250 - end[0]], color="green")[0])
+    # result += state["landmarks"]
+    
+    for i, particle in enumerate(state["particle_filter"].particles):
+        # print("Particle", i, particle.pose)
+        state["particles"][i].set_data(*particle.pose[:2])
+    result += state["particles"]
         
     return result
 
@@ -127,23 +125,25 @@ def goes_through_wall(p1, p2, map_info):
     return False
     
 def update(n, state):
+    # Move robot towards destination, or pick a new destination
     if state["destination"] is None or euclidean_distance(state["destination"], state["pos"]) < 4:
         while True:
             state["destination"] = random.choice(np.argwhere(state["map_data"] == 128))
             if not goes_through_wall(state["destination"], state["pos"], state["map_data"]):
                 break
         state["velocity"] = (np.random.random() + 0.5) * 0.1
-    
     real_movement = normalize(state["destination"] - state["pos"]) *  state["velocity"]
     state["pos"] += real_movement
     
+    # Generate laser and odometry data based on the real movement
     odom_data = generate_odometry_data(real_movement)
     laser_data = None
     if n % 50 == 0:
         # Only generate laser data every 50 frames
         laser_data = generate_laser_data(state)
         
-    state["pos_guess"] += odom_data
+    # Update our particle filter  
+    state["particle_filter"].sample_pose(odom_data, ODOM_SIGMA**2 * np.ones(3))
     if laser_data is not None:
         state["update_ls"] = True
         laser_data_to_plot(laser_data, state["last_ls"], 1, np.array(state["last_ls"].shape) / 2)
@@ -153,11 +153,13 @@ def update(n, state):
             "angle_min":0 
         }, 20, C=50, X=3)
         state["matches"] = []
-        for landmark in map(lambda l: transform_landmark(l, 250-state["pos"], np.identity(2)), landmarks):
-            match = state["matcher"].observe(landmark)
-            if match is not None:
-                state["matches"].append(match)
-        print(f"Matches: {len(state['matches'])}/{len(state['matcher'].valid_landmarks)}")
+        state["particle_filter"].observe_landmarks(landmarks, H, (LASER_SIGMA * 1) ** 2 * np.identity(2), .01)
+        state["particle_filter"].resample(frac=0.2)
+        # for landmark in map(lambda l: transform_landmark(l, 250-state["pos"], np.identity(2)), landmarks):
+        #     match = state["matcher"].observe(landmark)
+        #     if match is not None:
+        #         state["matches"].append(match)
+        # print(f"Matches: {len(state['matches'])}/{len(state['matcher'].valid_landmarks)}")
         
     return update_display(state)
 
@@ -174,7 +176,7 @@ def main():
     ls_img = ax2.imshow(image, cmap="Greys", interpolation="nearest")
     
     my_pos, = ax1.plot([], [], "ro", markersize=3)
-    my_pos_guess, = ax1.plot([], [], "go", markersize=3)
+    # my_pos_guess, = ax1.plot([], [], "go", markersize=3)
     dst_pos, = ax1.plot([], [], "bx")
     
     ax1.set_xlim([0, image.shape[0]])
@@ -185,22 +187,24 @@ def main():
     state = {
         "velocity": 0.5,
         "pos": np.array(image.shape) / 2,
-        "pos_guess": np.array(image.shape) / 2,
+        # "pos_guess": np.array(image.shape) / 2,
         "destination": np.array(image.shape) / 2,
         "my_pos": my_pos,
-        "my_pos_guess": my_pos_guess,
+        # "my_pos_guess": my_pos_guess,
         "dst_pos": dst_pos,
         "map_data": map_data,
         "ls_img": ls_img,
         "last_ls": image,
         "update_ls": False,
         "ax": ax1,
-        "matcher": landmark_matching.LandmarkMatcher(8, 12, 10),
-        "matches": [],
-        "landmarks": [],
+        "particle_filter": particle_filter.ParticleFilter(10, (*(np.array(image.shape) / 2), 0)),
+        "particles": []
     }
     
-    print("Starting")
+    for _ in state["particle_filter"].particles:
+        p, = ax1.plot([], [], "go", markersize=3)
+        state["particles"].append(p)
+    
     animation.FuncAnimation(fig, lambda n: update(n, state), None, interval=15, blit=True)
     plt.show()
         
