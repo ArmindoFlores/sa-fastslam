@@ -5,15 +5,19 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 
+import particle_filter
 import landmark_extractor
-import landmark_matching
 import loader
 
-SAMPLE = "corredor-16-maio"
+SAMPLE = "roundtrip-30-maio"
 SCANS_DIR = os.path.join("laser-scans", SAMPLE)
 ODOM_DIR = os.path.join("odometry", SAMPLE)
 REAL_LANDMARK_THRESHOLD = 6
+IMG_SIZE = 256
 
+
+def H(xr, yr, tr):
+    return np.array([[1, xr * np.sin(tr) - yr * np.cos(tr)], [0, 1]])
 
 def transform_landmark(landmark, position, rotmat):
     start = position[:2] + np.dot(rotmat, -landmark.start)
@@ -31,7 +35,7 @@ def transform_landmark(landmark, position, rotmat):
 
 def main(t="ls", save=False):
     global positions
-    scans = loader.from_dir(SCANS_DIR, "ls")
+    scan_files = loader.from_dir(SCANS_DIR, "ls")
     try:
         odoms = loader.from_dir(ODOM_DIR, "odom")
     except Exception:
@@ -43,99 +47,123 @@ def main(t="ls", save=False):
         fig = plt.figure()
         ax1 = fig.add_subplot(121)
         ax2 = fig.add_subplot(122)
-        if odoms is None:
-            positions = None
-        else:
-            t = np.ones(len(odoms))
-            positions = np.zeros((len(odoms), 4))
-            for i, odom in enumerate(odoms):                
-                with open(odom, "rb") as f:
-                    odom_info = pickle.load(f)
-                twist = odom_info["twist"]["twist"]
-                pos = twist["linear"]
-                rot = twist["angular"]
-                if i == 0:
-                    positions[i] = np.array([pos["x"], pos["y"], rot["z"], 0])
-                else:
-                    positions[i] += np.array([pos["x"], pos["y"], rot["z"], 0])
-                t[i] = odom_info["header"]["stamp"]
-
-        matcher = landmark_matching.LandmarkMatcher(REAL_LANDMARK_THRESHOLD, max_invalid_landmarks=10)
         
-        for scan in scans:           
+        t = np.ones(len(odoms))
+        positions = np.zeros((len(odoms), 3))
+        for i, odom in enumerate(odoms):                
+            with open(odom, "rb") as f:
+                odom_info = pickle.load(f)
+            twist = odom_info["twist"]["twist"]
+            pos = twist["linear"]
+            rot = twist["angular"]
+            if i == 0:
+                positions[i] = np.array([pos["x"], pos["y"], rot["z"]])
+            else:
+                positions[i] += np.array([pos["x"], pos["y"], rot["z"]])
+            t[i] = odom_info["header"]["stamp"]
+
+        
+        scans = []
+        for scan in scan_files:           
             with open(scan, "rb") as f:
                 scan_info = pickle.load(f)
+                scans.append(scan_info)
                 
-            tnow = scan_info["header"]["stamp"]
-            pnow = positions[np.argwhere(t >= tnow)[0]][0]
+        pf = particle_filter.ParticleFilter(200)
+        
+        active_scan = None
+        new_scan = False
+        for i in range(1, len(odoms)):
+            pose_estimate = positions[i] - positions[i-1]
             
-            img = np.ones((257, 257), dtype=np.uint8) * 255
-            scale_factor = 128 / 5
-            img_scale = 6 / img.shape[0]
-            offset = np.array([128, 128])
+            new_scan = False
+            if active_scan is None or (active_scan < len(scans) - 2 and scans[active_scan+1]["header"]["stamp"] < t[i]):
+                if active_scan is None:
+                    active_scan = 0
+                else:
+                    active_scan += 1
+                new_scan = True
+            
+            # Update particle filter with new odometry data
+            if np.sum(pose_estimate) > 0.01:
+                pf.sample_pose(pose_estimate, np.array([0.0005, 0.0005, 0.0001]))
+            
+            img = np.ones((IMG_SIZE, IMG_SIZE), dtype=np.uint8) * 255
+            scale_factor = IMG_SIZE // 10
+            offset = np.array([IMG_SIZE // 2, IMG_SIZE // 2])
 
-            rnow = np.pi - pnow[2]
+            rnow = np.pi - positions[i][2]
             rotmat = np.array([[np.cos(rnow), -np.sin(rnow)], [np.sin(rnow), np.cos(rnow)]])
             
-            for i, r in enumerate(scan_info["ranges"]):
-                theta = scan_info["angle_min"] + scan_info["angle_increment"] * i
-                index = np.array((r * np.cos(theta + rnow + np.pi), r * np.sin(theta + rnow + np.pi)))
-                index += pnow[:2]
+            if active_scan is not None:
+                scan_info = scans[active_scan]
                 
-                index = np.round(index * scale_factor + offset).astype(np.int32)
-                if 0 <= index[1] < img.shape[0] and 0 <= index[0] < img.shape[1]:
-                    img[index[1]][index[0]] = 0
+                if new_scan:
+                    landmarks = landmark_extractor.extract_landmarks(
+                        scan_info
+                    )
+                    if len(landmarks) != 0:
+                        pf.observe_landmarks(landmarks, H, 0.01 * np.identity(2), 0.01)
+                                    
+                for j, r in enumerate(scan_info["ranges"]):
+                    theta = scan_info["angle_min"] + scan_info["angle_increment"] * j
+                    index = np.array((r * np.cos(theta + rnow + np.pi), r * np.sin(theta + rnow + np.pi)))
+                    index += positions[i][:2]
+                    
+                    index = np.round(index * scale_factor + offset).astype(np.int32)
+                    if 0 <= index[1] < img.shape[0] and 0 <= index[0] < img.shape[1]:
+                        img[index[1]][index[0]] = 0
             
-            ax1.imshow(img, cmap="gray", interpolation="nearest", extent=(-3, 3, 3, -3))
-            ax2.imshow(img, cmap="gray", interpolation="nearest", extent=(-3, 3, 3, -3))
-            # ax1.set_xlim([0, img.shape[0]])
-            # ax1.set_ylim([0, img.shape[1]])
-            # ax2.set_xlim([0, img.shape[0]])
-            # ax2.set_ylim([0, img.shape[1]])
-            ax1.set_xlim([-3, 3])
-            ax1.set_ylim([-3, 3])
-            ax2.set_xlim([-3, 3])
-            ax2.set_ylim([-3, 3])
+            ax1.imshow(img, cmap="gray", interpolation="nearest")#, extent=(-3, 3, 3, -3))
+            ax2.imshow(img, cmap="gray", interpolation="nearest")#, extent=(-3, 3, 3, -3))
+            ax1.set_xlim([0, img.shape[0]])
+            ax1.set_ylim([0, img.shape[1]])
+            ax2.set_xlim([0, img.shape[0]])
+            ax2.set_ylim([0, img.shape[1]])
+            # ax1.set_xlim([-3, 3])
+            # ax1.set_ylim([-3, 3])
+            # ax2.set_xlim([-3, 3])
+            # ax2.set_ylim([-3, 3])
             
-            landmarks = landmark_extractor.extract_landmarks(scan_info)
-               
-            for real_landmark in matcher.valid_landmarks:     
-                start = real_landmark.start * scale_factor * img_scale
-                end = real_landmark.end * scale_factor * img_scale
-                ax2.plot([start[0], end[0]], [start[1], end[1]], color="black")
-            
-            matches = 0
-            for landmark in map(lambda l: transform_landmark(l, pnow[:2], rotmat), landmarks):
-                # Update our landmarks
-                match = matcher.observe(landmark)
-                
-                start = landmark.start * scale_factor * img_scale
-                end =  landmark.end * scale_factor * img_scale
-                ax1.plot([start[0], end[0]], [start[1], end[1]], "r")
-                
-                if match is not None:
-                    start = match.start * scale_factor * img_scale
-                    end = match.end * scale_factor * img_scale
-                    ax2.plot([start[0], end[0]], [start[1], end[1]], color="green")
-                    matches += 1
 
-            ax1.plot(*(pnow[:2] * scale_factor * img_scale), "ro")
-            ax2.plot(*(pnow[:2] * scale_factor * img_scale), "ro")
-            ax1.set_title(f"Landmarks seen: {len(landmarks)}")
+            # ax1.plot(*(positions[i][:2] * scale_factor * img_scale), "ro")
+            # ax2.plot(*(positions[i][:2] * scale_factor * img_scale), "ro")
+            # best = None
+            best = pf.particles[0]
+            for particle in pf.particles:
+                # if best is None or best.weight < particle.weight:
+                #     best = particle
+                position = particle.pose[:2] * scale_factor + offset
+                ax1.plot(position[0], position[1], "go", markersize=3, alpha=0.1)
+                
+            for landmark in best.landmark_matcher.valid_landmarks:
+                m = -landmark.equation[0] / landmark.equation[1]
+                b = -landmark.equation[2] / landmark.equation[1] * scale_factor
+                b = -m * offset[0] + b + offset[1]
+                start = (0, b)
+                end = (IMG_SIZE, m * IMG_SIZE + b)
+                plt.plot([start[0], end[0]], [start[1], end[1]], "g")
+                
+            if new_scan:
+                pf.resample(pf.N)
+            
+                
+            # ax1.set_title(f"Landmarks seen: {len(landmarks)}")
             ax1.set_xlabel("x [m]")
             ax1.set_ylabel("y [m]")
             ax2.set_xlabel("x [m]")
             ax2.set_ylabel("y [m]")
-            ax2.set_title(f"Matched landmarks: {matches}/{len(matcher.valid_landmarks)}")
+            ax1.set_title(f"Frame {i}/{len(odoms)}")
+            ax2.set_title(f"Frame {active_scan}/{len(scans)}")
             ax1.grid()
             ax2.grid()
             
-            print(len(matcher.landmarks))
+            # print(len(matcher.landmarks))
             
             if save:
                 plt.savefig(f"output/ls{str(n+1).zfill(3)}.png")
             else:
-                plt.pause(0.05)
+                plt.pause(0.01)
             ax1.clear()
             ax2.clear()
             n += 1
