@@ -114,7 +114,8 @@ def main(t="ls", save=False):
                     if 0 <= index[1] < img.shape[0] and 0 <= index[0] < img.shape[1]:
                         img[index[1]][index[0]] = 0
             
-            ax1.imshow(img, cmap="gray", interpolation="nearest")#, extent=(-3, 3, 3, -3))
+            ax1.imshow(np.zeros_like(img), cmap="Greys", interpolation="nearest")
+            # ax1.imshow(img, cmap="gray", interpolation="nearest")#, extent=(-3, 3, 3, -3))
             ax2.imshow(img, cmap="gray", interpolation="nearest")#, extent=(-3, 3, 3, -3))
             ax1.set_xlim([0, img.shape[0]])
             ax1.set_ylim([0, img.shape[1]])
@@ -131,8 +132,8 @@ def main(t="ls", save=False):
             # best = None
             best = pf.particles[0]
             for particle in pf.particles:
-                # if best is None or best.weight < particle.weight:
-                #     best = particle
+                if best is None or best.weight < particle.weight:
+                    best = particle
                 position = particle.pose[:2] * scale_factor + offset
                 ax1.plot(position[0], position[1], "go", markersize=3, alpha=0.1)
                 
@@ -142,19 +143,18 @@ def main(t="ls", save=False):
                 b = -m * offset[0] + b + offset[1]
                 start = (0, b)
                 end = (IMG_SIZE, m * IMG_SIZE + b)
-                plt.plot([start[0], end[0]], [start[1], end[1]], "g")
+                ax1.plot([start[0], end[0]], [start[1], end[1]], "g")
                 
             if new_scan:
                 pf.resample(pf.N)
             
-                
             # ax1.set_title(f"Landmarks seen: {len(landmarks)}")
             ax1.set_xlabel("x [m]")
             ax1.set_ylabel("y [m]")
             ax2.set_xlabel("x [m]")
             ax2.set_ylabel("y [m]")
-            ax1.set_title(f"Frame {i}/{len(odoms)}")
-            ax2.set_title(f"Frame {active_scan}/{len(scans)}")
+            ax1.set_title(f"Frame {i}/{len(odoms)} ({round(100*i/len(odoms), 1)}%)")
+            ax2.set_title(f"Frame {active_scan}/{len(scans)} ({round(100*active_scan/len(scans), 1)}%)")
             ax1.grid()
             ax2.grid()
             
