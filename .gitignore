@@ -5,3 +5,4 @@ odometry
 maps
 bags
 .catkin_workspace
+.vscode/settings.json
