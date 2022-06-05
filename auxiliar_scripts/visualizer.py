@@ -69,7 +69,7 @@ def main(t="ls", save=False):
                 scan_info = pickle.load(f)
                 scans.append(scan_info)
                 
-        pf = particle_filter.ParticleFilter(200)
+        pf = particle_filter.ParticleFilter(10)
         
         active_scan = None
         new_scan = False
