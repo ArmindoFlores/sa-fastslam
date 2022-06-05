@@ -14,7 +14,7 @@ class Particle:
         else:
             self.pose = np.array(pose, dtype=np.float64)
         self.weight = 1
-        self.landmark_matcher = landmark_matching.LandmarkMatcher(distance_threshold=.5, max_invalid_landmarks=15)
+        self.landmark_matcher = landmark_matching.LandmarkMatcher(distance_threshold=0.2, max_invalid_landmarks=15)
         
     def __repr__(self):
         return f"<Particle pose={tuple(np.round(self.pose, 3))} weight={round(self.weight, 3)}>"
@@ -80,8 +80,8 @@ class ParticleFilter:
         n1 = round(frac * N)
         n2 = N - n1
         total_weight = sum((particle.weight for particle in self.particles))
-        if total_weight > self.N / 2:
-            return
+        """ if total_weight > self.N / 2:
+            return """
         if total_weight == 0 or np.isnan(total_weight):
             for particle in self.particles:
                 particle.set_weight(1)
