@@ -1,3 +1,8 @@
 build
 devel
+laser-scans
+odometry
+maps
+bags
 .catkin_workspace
+.vscode/settings.json

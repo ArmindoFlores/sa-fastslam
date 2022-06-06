@@ -105,10 +105,14 @@ def update_display(state):
             state["landmarks"].append(state["ax"].plot([250 - start[1], 250 - end[1]], [250 - start[0], 250 - end[0]], color="green")[0])
     result += state["landmarks"]
     
+    best_particle = None
     for i, particle in enumerate(state["particle_filter"].particles):
+        if best_particle is None or particle.weight > best_particle.weight:
+            best_particle = particle
         # print("Particle", i, particle.pose)
         state["particles"][i].set_data([particle.pose[1], particle.pose[0]])
-    result += state["particles"]
+    state["best_particle"][0].set_data([best_particle.pose[1], best_particle.pose[0]])
+    result += state["particles"] + state["best_particle"]
         
     return result
 
@@ -210,12 +214,18 @@ def main():
         "particle_filter": particle_filter.ParticleFilter(150, (*(np.array(image.shape) / 2), 0)),
         "particles": [],
         "matches": [],
-        "landmarks": []
+        "landmarks": [],
+        "best_particle": []
     }
     
-    for _ in state["particle_filter"].particles:
-        p, = ax1.plot([], [], "go", markersize=3, alpha=.1)
+    best_particle = None
+    for particle in state["particle_filter"].particles:
+        if best_particle is None or particle.weight > best_particle.weight:
+            best_particle = particle
+        p, = ax1.plot(particle.pose[0], particle.pose[1], "go", markersize=3, alpha=.1)
         state["particles"].append(p)
+    c, = ax1.plot(best_particle.pose[0], best_particle.pose[1], "yo", markersize=3)
+    state["best_particle"].append(c)
     
     animation.FuncAnimation(fig, lambda n: update(n, state), None, interval=15, blit=True)
     plt.show()

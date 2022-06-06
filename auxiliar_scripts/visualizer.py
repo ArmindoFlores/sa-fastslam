@@ -69,7 +69,7 @@ def main(t="ls", save=False):
                 scan_info = pickle.load(f)
                 scans.append(scan_info)
                 
-        pf = particle_filter.ParticleFilter(200)
+        pf = particle_filter.ParticleFilter(10)
         
         active_scan = None
         new_scan = False
@@ -128,6 +128,21 @@ def main(t="ls", save=False):
                     best = particle
                 position = particle.pose[:2] * scale_factor + offset
                 ax1.plot(position[0], position[1], "go", markersize=3, alpha=0.1)
+
+            # Print best particle in red
+            """ bestPose = [0,0]
+            position = [0,0]
+            counter = 0
+            for particle in pf.particles:
+                if particle.weight > best.weight * 0.9:
+                    bestPose[0] += particle.pose[0]
+                    bestPose[1] += particle.pose[1]
+                    counter += 1
+            position1[0] = bestPose[0]/counter * scale_factor + offset
+            position1[1] = bestPose[0]/counter * scale_factor + offset
+            ax1.plot(position[0], position[1], "yo", markersize=3, alpha=0.99) """
+            position = best.pose[:2] * scale_factor + offset
+            ax1.plot(position[0], position[1], "ro", markersize=3, alpha=0.99)
                 
             print("Best particle:", best)
                 

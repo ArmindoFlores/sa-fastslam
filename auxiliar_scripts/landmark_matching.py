@@ -7,16 +7,16 @@ LANDMARK_VAR = 0.05
 
 
 class KalmanFilter:
-    def __init__(self, landmark, initial_covariance, R):
+    def __init__(self, landmark, initial_covariance, Qt):
         self.landmark = landmark
         self.covariance = initial_covariance
-        self.R = R
+        self.Qt = Qt
         
     def update(self, z_measured, z_predicted, H):
-        S = H.dot(self.covariance).dot(H.T) + self.R # * (2 - landmark.r2)
-        K = self.covariance.dot(H.T).dot(np.linalg.inv(S))
+        Q = H.dot(self.covariance).dot(H.T) + self.Qt # * (2 - landmark.r2)
+        K = self.covariance.dot(H.T).dot(np.linalg.inv(Q))
         self.landmark.update_params(K.dot(z_measured - z_predicted))
-        self.covariance += -K.dot(S).dot(K.T)
+        self.covariance -= K.dot(H).dot(self.covariance)
 
 class LandmarkMatcher:
     def __init__(self, minimum_observations=6, distance_threshold=0.25, max_invalid_landmarks=None):
@@ -24,13 +24,13 @@ class LandmarkMatcher:
         self.minimum_observations = minimum_observations
         self.distance_threshold = distance_threshold
         self.max_invalid_landmarks = max_invalid_landmarks
-        self.R = LANDMARK_VAR * np.identity(2)
+        self.Qt = LANDMARK_VAR * np.identity(2)
         
     def copy(self):
         new_landmark_matcher = LandmarkMatcher(self.minimum_observations, self.distance_threshold, self.max_invalid_landmarks)
         for landmark, t, ekf in self._landmarks:
             copy_landmark = landmark.copy()
-            new_landmark_matcher._landmarks.append([copy_landmark, t, KalmanFilter(copy_landmark, ekf.covariance, ekf.R)])
+            new_landmark_matcher._landmarks.append([copy_landmark, t, KalmanFilter(copy_landmark, ekf.covariance, ekf.Qt)])
         return new_landmark_matcher
         
     def observe(self, landmark, H, pose):
@@ -59,7 +59,7 @@ class LandmarkMatcher:
                 match = closest["landmark"]
         else:
             cp = worldspace_landmark.copy()
-            self._landmarks.append([cp, time.time(), KalmanFilter(cp, self.R, self.R)])
+            self._landmarks.append([cp, time.time(), KalmanFilter(cp, np.linalg.inv(H).T.dot(self.Qt).dot(np.linalg.inv(H)), self.Qt)])
             # self._landmarks.append([landmark, time.time()]) 
         
         # Remove oldest lowest-seen invalid landmark

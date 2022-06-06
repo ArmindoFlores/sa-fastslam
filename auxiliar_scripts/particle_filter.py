@@ -14,7 +14,7 @@ class Particle:
         else:
             self.pose = np.array(pose, dtype=np.float64)
         self.weight = 1
-        self.landmark_matcher = landmark_matching.LandmarkMatcher(distance_threshold=.5, max_invalid_landmarks=15)
+        self.landmark_matcher = landmark_matching.LandmarkMatcher(distance_threshold=0.2, max_invalid_landmarks=15)
         
     def __repr__(self):
         return f"<Particle pose={tuple(np.round(self.pose, 3))} weight={round(self.weight, 3)}>"
@@ -44,8 +44,9 @@ class Particle:
         z_predicted = landmark.params(self.pose)
         Q = H.dot(covariance).dot(H.T) + Qt
         Z = z_measured - z_predicted
-        w = np.exp(-0.5 * Z.T.dot(np.linalg.inv(Q)).dot(Z)) / np.sqrt(np.linalg.det(2 * np.pi * Q))
-        self.weight *= w
+        """ w = np.exp(-0.5 * Z.T.dot(np.linalg.inv(Q)).dot(Z)) / np.sqrt(np.linalg.det(2 * np.pi * Q))
+        self.weight *= w """
+        self.weight = np.exp(-0.5 * Z.T.dot(np.linalg.inv(Q)).dot(Z)) / np.sqrt(np.linalg.det(2 * np.pi * Q))
         
     def copy(self):
         new_particle = Particle(self.pose.copy())
