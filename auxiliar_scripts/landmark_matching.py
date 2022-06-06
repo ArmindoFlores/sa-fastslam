@@ -28,9 +28,10 @@ class LandmarkMatcher:
         
     def copy(self):
         new_landmark_matcher = LandmarkMatcher(self.minimum_observations, self.distance_threshold, self.max_invalid_landmarks)
-        for landmark, t, ekf in self._landmarks:
+        for t, ekf in self._landmarks:
+            landmark = ekf.landmark
             copy_landmark = landmark.copy()
-            new_landmark_matcher._landmarks.append([copy_landmark, t, KalmanFilter(copy_landmark, ekf.covariance, ekf.Qt)])
+            new_landmark_matcher._landmarks.append([t, KalmanFilter(copy_landmark, ekf.covariance, ekf.Qt)])
         return new_landmark_matcher
         
     def observe(self, landmark, H, pose):
@@ -43,29 +44,31 @@ class LandmarkMatcher:
         new_params = np.array([d + pose[0] * np.cos(theta) + pose[1] * np.sin(theta), theta])
         worldspace_landmark.update_params(new_params - np.array([d, phi]))
         
-        for i, (glandmark, _, ekf) in enumerate(self._landmarks):
+        for i, (_, ekf) in enumerate(self._landmarks):
+            glandmark = ekf.landmark
             # Compute the distance between projections on both landmarks
             ld = np.linalg.norm(worldspace_landmark.closest_point(*pose[:2]) - glandmark.closest_point(*pose[:2]))
             if ld < self.distance_threshold and (closest is None or ld < closest["difference"]):
-                closest = {"difference": ld, "landmark": glandmark, "filter": ekf}
+                closest = {"difference": ld, "filter": ekf}
         if closest is not None:
             # Found a match
-            closest["filter"].update(new_params, closest["landmark"].params(), H)
-            closest["landmark"].count += 1
-            self._landmarks[i][1] = time.time()
+            closest["filter"].update(new_params, closest["filter"].landmark.params(), H)
+            closest["filter"].landmark.count += 1
+            self._landmarks[i][0] = time.time()
             
             # closest["landmark"].update(landmark)
-            if closest["landmark"].count >= self.minimum_observations:
-                match = closest["landmark"]
+            if closest["filter"].landmark.count >= self.minimum_observations:
+                match = closest["filter"]
         else:
             cp = worldspace_landmark.copy()
-            self._landmarks.append([cp, time.time(), KalmanFilter(cp, np.linalg.inv(H).T.dot(self.Qt).dot(np.linalg.inv(H)), self.Qt)])
+            self._landmarks.append([time.time(), KalmanFilter(cp, np.linalg.inv(H).T.dot(self.Qt).dot(np.linalg.inv(H)), self.Qt)])
             # self._landmarks.append([landmark, time.time()]) 
         
         # Remove oldest lowest-seen invalid landmark
         if self.max_invalid_landmarks is not None and len(self._landmarks) - len(self.valid_landmarks) > self.max_invalid_landmarks:
             to_remove = None
-            for i, (landmark, age, _) in enumerate(self._landmarks):
+            for i, (age, ekf) in enumerate(self._landmarks):
+                landmark = ekf.landmark
                 if landmark.count < self.minimum_observations:
                     if to_remove is None:
                         to_remove = (i, age)
@@ -79,8 +82,8 @@ class LandmarkMatcher:
     
     @property
     def landmarks(self):
-        return tuple(map(lambda lt: lt[0], self._landmarks))
+        return tuple(map(lambda lt: lt[1], self._landmarks))
     
     @property
     def valid_landmarks(self):
-        return tuple(filter(lambda l: l.count >= self.minimum_observations, map(lambda lt: lt[0], self._landmarks)))
+        return tuple(filter(lambda l: l.landmark.count >= self.minimum_observations, map(lambda lt: lt[1], self._landmarks)))

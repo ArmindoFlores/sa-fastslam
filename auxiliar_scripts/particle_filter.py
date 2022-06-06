@@ -19,13 +19,13 @@ class Particle:
     def __repr__(self):
         return f"<Particle pose={tuple(np.round(self.pose, 3))} weight={round(self.weight, 3)}>"
 
-    def observe_landmark(self, landmark, H_func, covariance, Qt):
+    def observe_landmark(self, landmark, H_func, Qt):
         """Try to match an observed landmark to list of previously seen ones and update its location 
         estimate and the particle's weight.
         """
         match = self.landmark_matcher.observe(landmark, H_func(*self.pose), self.pose)
         if match is not None:
-            self.weigh(landmark.params(), match, H_func(*self.pose), covariance, Qt)
+            self.weigh(landmark.params(), match, H_func(*self.pose), Qt)
     
     def set_weight(self, weight):
         """Set the particle's weight to `weight`."""
@@ -35,18 +35,17 @@ class Particle:
         """Update pose (AKA move the particle) according to odometry data `odom` and variance `variance`."""
         self.pose += np.random.normal(odom, np.sqrt(variance)).reshape(self.pose.shape)
 
-    def weigh(self, z_measured, landmark, H, covariance, Qt):
+    def weigh(self, z_measured, match, H, Qt):
         """Weigh the particle's importance after observing a new landmark.
         `z_measured` - the observed position of the landmark
-        `landmark` - matched landmark
-        `H`, `covariance`, `Qt` - parameters???
+        `match` - matched landmark
+        `Qt` - laser measurement variance
         """
+        landmark = match.landmark
         z_predicted = landmark.params(self.pose)
-        Q = H.dot(covariance).dot(H.T) + Qt
+        Q = H.dot(match.covariance).dot(H.T) + Qt
         Z = z_measured - z_predicted
-        """ w = np.exp(-0.5 * Z.T.dot(np.linalg.inv(Q)).dot(Z)) / np.sqrt(np.linalg.det(2 * np.pi * Q))
-        self.weight *= w """
-        self.weight = np.exp(-0.5 * Z.T.dot(np.linalg.inv(Q)).dot(Z)) / np.sqrt(np.linalg.det(2 * np.pi * Q))
+        self.weight *= np.exp(-0.5 * Z.T.dot(np.linalg.inv(Q)).dot(Z)) / np.sqrt(np.linalg.det(2 * np.pi * Q))
         
     def copy(self):
         new_particle = Particle(self.pose.copy())
@@ -65,11 +64,11 @@ class ParticleFilter:
         for particle in self.particles:
             particle.update_pose(odom, variance)
 
-    def observe_landmarks(self, landmarks, H_func, covariance, Qt):
+    def observe_landmarks(self, landmarks, H_func, Qt):
         """Inform every particle of landmark observations and update their weights accordingly."""
         for particle in self.particles:
             for landmark in landmarks:
-                particle.observe_landmark(landmark, H_func, covariance, Qt)
+                particle.observe_landmark(landmark, H_func, Qt)
 
     def resample(self, N=None, frac=0.8):
         """Compute the next generation of `N` particles based on the importance (weight) of the previous one.

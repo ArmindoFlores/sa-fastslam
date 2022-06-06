@@ -90,7 +90,7 @@ def scan_callback(data):
     landmarks = extract_landmarks(laser)
 
     if len(landmarks) != 0:
-        pf.observe_landmarks(landmarks, H, laser_covariance, Qt)
+        pf.observe_landmarks(landmarks, H, Qt)
     
     
     for p in pf.particles:

@@ -100,7 +100,7 @@ def main(t="ls", save=False):
                         scan_info
                     )
                     if len(landmarks) != 0:
-                        pf.observe_landmarks(landmarks, H, 0.001 * np.identity(2), 0.001 * np.identity(2))
+                        pf.observe_landmarks(landmarks, H, 0.001 * np.identity(2))
                                     
                 for j, r in enumerate(scan_info["ranges"]):
                     theta = scan_info["angle_min"] + scan_info["angle_increment"] * j
@@ -146,7 +146,8 @@ def main(t="ls", save=False):
                 
             print("Best particle:", best)
                 
-            for landmark in best.landmark_matcher.valid_landmarks:
+            for ekf in best.landmark_matcher.valid_landmarks:
+                landmark = ekf.landmark
                 m = -landmark.equation[0] / landmark.equation[1]
                 b = -landmark.equation[2] / landmark.equation[1] * scale_factor
                 b = -m * offset[0] + b + offset[1]
