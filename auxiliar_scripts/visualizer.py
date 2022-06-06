@@ -85,15 +85,12 @@ def main(t="ls", save=False):
                 new_scan = True
             
             # Update particle filter with new odometry data
-            if np.sum(pose_estimate) > 0.01:
-                pf.sample_pose(pose_estimate, np.array([0.0005, 0.0005, 0.0001]))
+            if np.sum(pose_estimate) > 0.001:
+                pf.sample_pose(pose_estimate, np.array([0.005, 0.005, 0.001]))
             
             img = np.ones((IMG_SIZE, IMG_SIZE), dtype=np.uint8) * 255
             scale_factor = IMG_SIZE // 10
             offset = np.array([IMG_SIZE // 2, IMG_SIZE // 2])
-
-            rnow = np.pi - positions[i][2]
-            rotmat = np.array([[np.cos(rnow), -np.sin(rnow)], [np.sin(rnow), np.cos(rnow)]])
             
             if active_scan is not None:
                 scan_info = scans[active_scan]
@@ -103,12 +100,11 @@ def main(t="ls", save=False):
                         scan_info
                     )
                     if len(landmarks) != 0:
-                        pf.observe_landmarks(landmarks, H, 0.01 * np.identity(2), 0.01)
+                        pf.observe_landmarks(landmarks, H, 0.001 * np.identity(2), 0.001 * np.identity(2))
                                     
                 for j, r in enumerate(scan_info["ranges"]):
                     theta = scan_info["angle_min"] + scan_info["angle_increment"] * j
-                    index = np.array((r * np.cos(theta + rnow + np.pi), r * np.sin(theta + rnow + np.pi)))
-                    index += positions[i][:2]
+                    index = np.array((r * np.cos(theta), r * np.sin(theta)))
                     
                     index = np.round(index * scale_factor + offset).astype(np.int32)
                     if 0 <= index[1] < img.shape[0] and 0 <= index[0] < img.shape[1]:
@@ -126,16 +122,14 @@ def main(t="ls", save=False):
             # ax2.set_xlim([-3, 3])
             # ax2.set_ylim([-3, 3])
             
-
-            # ax1.plot(*(positions[i][:2] * scale_factor * img_scale), "ro")
-            # ax2.plot(*(positions[i][:2] * scale_factor * img_scale), "ro")
-            # best = None
             best = pf.particles[0]
             for particle in pf.particles:
-                if best is None or best.weight < particle.weight:
+                if best.weight < particle.weight:
                     best = particle
                 position = particle.pose[:2] * scale_factor + offset
                 ax1.plot(position[0], position[1], "go", markersize=3, alpha=0.1)
+                
+            print("Best particle:", best)
                 
             for landmark in best.landmark_matcher.valid_landmarks:
                 m = -landmark.equation[0] / landmark.equation[1]
@@ -147,6 +141,7 @@ def main(t="ls", save=False):
                 
             if new_scan:
                 pf.resample(pf.N)
+                print("Resampled")
             
             # ax1.set_title(f"Landmarks seen: {len(landmarks)}")
             ax1.set_xlabel("x [m]")
