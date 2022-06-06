@@ -19,15 +19,15 @@ class KalmanFilter:
         self.covariance -= K.dot(H).dot(self.covariance)
 
 class LandmarkMatcher:
-    def __init__(self, minimum_observations=6, distance_threshold=0.25, max_invalid_landmarks=None):
+    def __init__(self, Qt, minimum_observations=6, distance_threshold=0.25, max_invalid_landmarks=None):
         self._landmarks = []
         self.minimum_observations = minimum_observations
         self.distance_threshold = distance_threshold
         self.max_invalid_landmarks = max_invalid_landmarks
-        self.Qt = LANDMARK_VAR * np.identity(2)
+        self.Qt = Qt
         
     def copy(self):
-        new_landmark_matcher = LandmarkMatcher(self.minimum_observations, self.distance_threshold, self.max_invalid_landmarks)
+        new_landmark_matcher = LandmarkMatcher(self.Qt, self.minimum_observations, self.distance_threshold, self.max_invalid_landmarks)
         for t, ekf in self._landmarks:
             landmark = ekf.landmark
             copy_landmark = landmark.copy()
@@ -77,7 +77,7 @@ class LandmarkMatcher:
                     elif self._landmarks[to_remove[0]][0].count == landmark.count and to_remove[1] > age:
                         to_remove = (i, age)
             if to_remove is not None:
-                self._landmarks.pop(to_remove[0])            
+                self._landmarks.pop(to_remove[0])       
         return match
     
     @property

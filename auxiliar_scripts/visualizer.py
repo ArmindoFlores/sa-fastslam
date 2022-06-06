@@ -69,7 +69,7 @@ def main(t="ls", save=False):
                 scan_info = pickle.load(f)
                 scans.append(scan_info)
                 
-        pf = particle_filter.ParticleFilter(10)
+        pf = particle_filter.ParticleFilter(10, np.array([[0.01, 0], [0, 0.0003]]))
         
         active_scan = None
         new_scan = False
@@ -100,7 +100,7 @@ def main(t="ls", save=False):
                         scan_info
                     )
                     if len(landmarks) != 0:
-                        pf.observe_landmarks(landmarks, H, 0.001 * np.identity(2))
+                        pf.observe_landmarks(landmarks, H)
                                     
                 for j, r in enumerate(scan_info["ranges"]):
                     theta = scan_info["angle_min"] + scan_info["angle_increment"] * j

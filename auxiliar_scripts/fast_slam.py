@@ -158,7 +158,7 @@ def update(n, state):
             "angle_min":0 
         }, 20, C=50, X=3)
         state["matches"] = []
-        state["particle_filter"].observe_landmarks(landmarks, H, 0.1)
+        state["particle_filter"].observe_landmarks(landmarks, H)
         best_particle = None
         for particle in state["particle_filter"].particles:
             if best_particle is None or particle.weight > best_particle.weight:
@@ -211,7 +211,7 @@ def main():
         "last_ls": image,
         "update_ls": False,
         "ax": ax1,
-        "particle_filter": particle_filter.ParticleFilter(150, (*(np.array(image.shape) / 2), 0)),
+        "particle_filter": particle_filter.ParticleFilter(150, np.array([[0.01, 0], [0, 0.0003]]), (*(np.array(image.shape) / 2), 0)),
         "particles": [],
         "matches": [],
         "landmarks": [],

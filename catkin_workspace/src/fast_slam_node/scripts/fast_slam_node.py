@@ -90,7 +90,7 @@ def scan_callback(data):
     landmarks = extract_landmarks(laser)
 
     if len(landmarks) != 0:
-        pf.observe_landmarks(landmarks, H, Qt)
+        pf.observe_landmarks(landmarks, H)
     
     
     for p in pf.particles:
@@ -107,7 +107,7 @@ def main():
     global Qt
     global last_pose
 
-    pf = ParticleFilter(10)
+    pf = ParticleFilter(10, np.array([[0.01, 0], [0, 0]]))
     odom_covariance = np.array([0.1, 0.1, 0.1])
     laser_covariance = 0.01 * np.identity(2)
     Qt = 0.01
