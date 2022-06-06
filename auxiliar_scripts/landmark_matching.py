@@ -72,9 +72,9 @@ class LandmarkMatcher:
                 if landmark.count < self.minimum_observations:
                     if to_remove is None:
                         to_remove = (i, age)
-                    elif self._landmarks[to_remove[0]][1].count > landmark.count:
+                    elif self._landmarks[to_remove[0]][1].landmark.count > landmark.count:
                         to_remove = (i, age)
-                    elif self._landmarks[to_remove[0]][1].count == landmark.count and to_remove[1] > age:
+                    elif self._landmarks[to_remove[0]][1].landmark.count == landmark.count and to_remove[1] > age:
                         to_remove = (i, age)
             if to_remove is not None:
                 self._landmarks.pop(to_remove[0])       
