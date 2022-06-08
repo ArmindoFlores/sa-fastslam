@@ -4,10 +4,11 @@ import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
+import tqdm
 
-import particle_filter
 import landmark_extractor
 import loader
+import particle_filter
 
 SAMPLE = "roundtrip-30-maio"
 SCANS_DIR = os.path.join("laser-scans", SAMPLE)
@@ -15,6 +16,8 @@ ODOM_DIR = os.path.join("odometry", SAMPLE)
 REAL_LANDMARK_THRESHOLD = 6
 IMG_SIZE = 256
 
+def quaternion_to_euler(x, y, z, w):
+    return np.arctan2(2 * (x * y + z * w), 1 - 2 * (y * y + z * z)), np.arcsin(2 * (x * z - w * y)), np.arctan2(2 * (x * w + y * z), 1 - 2 * (z * z + w * w))
 
 def H(xr, yr, tr):
     return np.array([[1, xr * np.sin(tr) - yr * np.cos(tr)], [0, 1]])
@@ -50,21 +53,22 @@ def main(t="ls", save=False):
         
         t = np.ones(len(odoms))
         positions = np.zeros((len(odoms), 3))
-        for i, odom in enumerate(odoms):                
+        for i, odom in tqdm.tqdm(enumerate(odoms), desc="Loading odometry files"):                
             with open(odom, "rb") as f:
                 odom_info = pickle.load(f)
-            twist = odom_info["twist"]["twist"]
-            pos = twist["linear"]
-            rot = twist["angular"]
-            if i == 0:
-                positions[i] = np.array([pos["x"], pos["y"], rot["z"]])
-            else:
-                positions[i] += np.array([pos["x"], pos["y"], rot["z"]])
+            pose = odom_info["pose"]["pose"]
+            pos = pose["position"]
+            rot = pose["orientation"]
+            rot_euler = quaternion_to_euler(rot["x"], rot["y"], rot["z"], rot["w"])
+            # if i == 0:
+            #     positions[i] = np.array([pos["x"], pos["y"], rot["z"]])
+            # else:
+            positions[i] = np.array([pos["x"], pos["y"], rot_euler[2]])
             t[i] = odom_info["header"]["stamp"]
 
         
         scans = []
-        for scan in scan_files:           
+        for scan in tqdm.tqdm(scan_files, desc="Loading scan files"):           
             with open(scan, "rb") as f:
                 scan_info = pickle.load(f)
                 scans.append(scan_info)
@@ -85,7 +89,7 @@ def main(t="ls", save=False):
                 new_scan = True
             
             # Update particle filter with new odometry data
-            if np.sum(pose_estimate) > 0.001:
+            if np.sum(pose_estimate) > 0.0001:
                 pf.sample_pose(pose_estimate, np.array([0.005, 0.005, 0.001]))
             
             img = np.ones((IMG_SIZE, IMG_SIZE), dtype=np.uint8) * 255
