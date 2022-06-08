@@ -43,11 +43,12 @@ class LandmarkMatcher:
         theta = phi + pose[2]
         new_params = np.array([d + pose[0] * np.cos(theta) + pose[1] * np.sin(theta), theta])
         worldspace_landmark.update_params(new_params - np.array([d, phi]))
+        p1 = worldspace_landmark.closest_point(*pose[:2])
         
         for i, (_, ekf) in enumerate(self._landmarks):
             glandmark = ekf.landmark
             # Compute the distance between projections on both landmarks
-            ld = np.linalg.norm(worldspace_landmark.closest_point(*pose[:2]) - glandmark.closest_point(*pose[:2]))
+            ld = np.linalg.norm(p1 - glandmark.closest_point(*pose[:2]))
             if ld < self.distance_threshold and (closest is None or ld < closest["difference"]):
                 closest = {"difference": ld, "filter": ekf}
         if closest is not None:
