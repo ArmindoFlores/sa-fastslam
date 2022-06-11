@@ -17,7 +17,7 @@ REAL_LANDMARK_THRESHOLD = 6
 IMG_SIZE = 256
 
 def quaternion_to_euler(x, y, z, w):
-    return np.arctan2(2 * (x * y + z * w), 1 - 2 * (y * y + z * z)), np.arcsin(2 * (x * z - w * y)), np.arctan2(2 * (x * w + y * z), 1 - 2 * (z * z + w * w))
+    return np.arctan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y)), np.arcsin(2 * (w * y - z * x)), np.arctan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
 
 def H(xr, yr, tr):
     return np.array([[1, xr * np.sin(tr) - yr * np.cos(tr)], [0, 1]])

@@ -41,22 +41,12 @@ def euler_angle_to_quaternion(X, Y, Z):
     return {"x": qx, "y": qy, "z": qz, "w": qw}
 
 def quaternion_to_euler_angle(w, x, y, z):
-    ysqr = y * y
+    return {
+        "x": np.arctan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y)),
+        "y": np.arcsin(2 * (w * y - z * x)), 
+        "z": np.arctan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+    }
 
-    t0 = +2.0 * (w * x + y * z)
-    t1 = +1.0 - 2.0 * (x * x + ysqr)
-    X = math.degrees(math.atan2(t0, t1))
-
-    t2 = +2.0 * (w * y - z * x)
-    t2 = +1.0 if t2 > +1.0 else t2
-    t2 = -1.0 if t2 < -1.0 else t2
-    Y = math.degrees(math.asin(t2))
-
-    t3 = +2.0 * (w * z + x * y)
-    t4 = +1.0 - 2.0 * (ysqr + z * z)
-    Z = math.degrees(math.atan2(t3, t4))
-
-    return {"x": X, "y": Y, "z": Z}
 
 def H(xr, yr, tr):
     """ Jacobian Matrix """
@@ -111,18 +101,25 @@ def odom_callback(data):
     rot = quaternion_to_euler_angle(rot["w"], rot["x"], rot["y"], rot["z"])
 
     # Get odometry by subtracting the current pose from the last pose estimation
-    pose = np.array([pos["x"], pos["y"], rot["z"]]) - last_pose_estimate
-    last_pose_estimate = pose
+    displacement = np.array([pos["x"], pos["y"], rot["z"]]) - last_pose_estimate
+    last_pose_estimate = np.array([pos["x"], pos["y"], rot["z"]])
 
     # Update particles position if particle moved (needs to be changed to a more realistic threshold)
     if pos["x"] > 0 or pos["y"] > 0 or rot["z"] > 0:
-        pf.sample_pose(pose, odom_covariance)
+        pf.sample_pose(displacement, odom_covariance)
 
 def scan_callback(data):
+    global bag_initial_time
+
+    if bag_initial_time is None:
+        bag_initial_time = rospy.Time.now().to_sec() - data.header.stamp.to_sec()
+    
+    time = rospy.Time.now().to_sec() - bag_initial_time
+    
     laser = {
         "header": {
             "seq": data.header.seq,
-            "stamp": data.header.stamp.secs + data.header.stamp.nsecs * 1e-9,
+            "stamp": data.header.stamp.to_sec(),
             "frame_id": data.header.frame_id
         },
         "angle_min": data.angle_min,
@@ -135,6 +132,12 @@ def scan_callback(data):
         "ranges": data.ranges,
         "intensities": data.intensities
     }
+
+    # If the scan was a long time ago
+    if time - laser['header']['stamp'] > 0.2:
+        return
+
+    #rospy.loginfo(f"Time difference: {time - laser['header']['stamp']} s")
 
     landmarks = extract_landmarks(laser)
 
@@ -185,13 +188,13 @@ def update_map():
     map["pose"].pose.orientation.w = rot["w"]
     
     # Publish new map and pose
-    publishers["map_metadata"].publish(map["map_metadata"])
-    publishers["grid"].publish(map["grid"])
+    """ publishers["map_metadata"].publish(map["map_metadata"])
+    publishers["grid"].publish(map["grid"]) """
     publishers["pose"].publish(map["pose"])
 
 def main():
     global odom_covariance
-    odom_covariance = np.array([0.1, 0.1, 0.1])
+    odom_covariance = np.array([0.005, 0.005, 0.001])
 
     global Qt
     Qt = np.array([[0.01, 0], [0, 0.0003]])
@@ -200,7 +203,10 @@ def main():
     last_pose_estimate = np.array([0, 0, 0])
 
     global pf 
-    pf = ParticleFilter(10, Qt)
+    pf = ParticleFilter(200, Qt)
+
+    global bag_initial_time 
+    bag_initial_time = None
    
     # Init node
     rospy.init_node('fast_slam_node', anonymous=True)
