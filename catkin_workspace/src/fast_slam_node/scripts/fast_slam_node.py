@@ -10,6 +10,17 @@ from landmark_extractor import  *
 from landmark_matching import  *
 import numpy as np
 
+def get_current_pose_estimate():
+    """ Looks for the particle with the most `weight` and extracts his `pose` """
+
+    # Find the particle with the most weight
+    particle = pf.particles[0]
+    for p in pf.particles:
+        if p.weight > particle.weight:
+            particle = p
+
+    return particle.pose
+
 def euler_angle_to_quaternion(X, Y, Z):
     """
     Convert an Euler angle to a quaternion.
@@ -136,7 +147,6 @@ def scan_callback(data):
     update_map()
 
 def update_map():
-
     global map
 
     # Needs to expand if the map grows larger
@@ -164,10 +174,11 @@ def update_map():
     map["pose"].header.stamp = rospy.Time.now()
     map["pose"].header.frame_id = "map"
     
-    # Example on how to change position and orientation 
-    map["pose"].pose.position.x += 0.01
-    map["pose"].pose.position.y += 0.01
-    rot = euler_angle_to_quaternion(0, 0, np.pi / 4)
+    # Find the current pose estimate
+    pose = get_current_pose_estimate()
+    map["pose"].pose.position.x = pose[0]
+    map["pose"].pose.position.y = pose[1]
+    rot = euler_angle_to_quaternion(0, 0, pose[2])
     map["pose"].pose.orientation.x = rot["x"]
     map["pose"].pose.orientation.y = rot["y"]
     map["pose"].pose.orientation.z = rot["z"]
@@ -207,6 +218,7 @@ def main():
         "map_metadata": MapMetaData(),
         "pose": PoseStamped()
     }
+
 
     print("Fast Slam Node initialized, now listening for scans and odometry to update the current estimated map and pose")
     rospy.spin()
