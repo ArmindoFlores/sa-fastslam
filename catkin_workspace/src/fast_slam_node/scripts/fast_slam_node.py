@@ -10,16 +10,25 @@ from landmark_extractor import  *
 from landmark_matching import  *
 import numpy as np
 
+def to_cartesian(theta, r):
+    if r > 0.001:
+        return r * np.array((math.cos(theta), math.sin(theta)))
+    
+    return None
+
 def get_current_pose_estimate():
-    """ Looks for the particle with the most `weight` and extracts his `pose` """
+    """ Calculates center of mass of the particles """
 
-    # Find the particle with the most weight
-    particle = pf.particles[0]
+    # Calculate total weight
+    total_weight = 0
     for p in pf.particles:
-        if p.weight > particle.weight:
-            particle = p
+        total_weight += p.weight
+    
+    pose = np.array([.0, .0, .0])
+    for p in pf.particles:
+        pose += p.weight * p.pose / total_weight
 
-    return particle.pose
+    return pose
 
 def euler_angle_to_quaternion(X, Y, Z):
     """
@@ -46,7 +55,6 @@ def quaternion_to_euler_angle(w, x, y, z):
         "y": np.arcsin(2 * (w * y - z * x)), 
         "z": np.arctan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
     }
-
 
 def H(xr, yr, tr):
     """ Jacobian Matrix """
@@ -147,26 +155,57 @@ def scan_callback(data):
 
     pf.resample(pf.N)
 
-    update_map()
+    update_map(laser["ranges"], laser["angle_increment"], laser["angle_min"])
+    publish_map()
 
-def update_map():
+def update_map(ranges, angle_increment, min_angle):
+    """ Update grid map and pose estimate """
     global map
 
-    # Needs to expand if the map grows larger
-    map["map_metadata"].height = 384 
-    map["map_metadata"].width = 384 
+    # Offset from the matrix to the frame
+    offset = np.array([map["map_metadata"].width // 2, map["map_metadata"].height // 2 ])
 
-    # Is it constant?
-    map["map_metadata"].resolution = 0.05 
+    # Find the current pose estimate
+    pose = get_current_pose_estimate()
+    rot = euler_angle_to_quaternion(0, 0, pose[2])
 
-    # Copied from rosbags so the map appear on the middle of the RViz referencial
-    map["map_metadata"].origin.orientation.w = 1.0
-    map["map_metadata"].origin.position.x = -10.0
-    map["map_metadata"].origin.position.y = -10.0
+    # Update pose
+    map["pose"].pose.position.x = pose[0] 
+    map["pose"].pose.position.y = pose[1]
+    map["pose"].pose.orientation.x = rot["x"]
+    map["pose"].pose.orientation.y = rot["y"]
+    map["pose"].pose.orientation.z = rot["z"]
+    map["pose"].pose.orientation.w = rot["w"]
 
+    angle = min_angle + pose[2]
+    for r in ranges:
+        point = to_cartesian(angle, r)
+        
+        angle += angle_increment
+        if point is None:
+            continue
+        
+        # Transform from the robot frame to the world frame
+        point += np.array_split(pose, 2)[0]
 
-    # Simulate unknown map (all -1)
-    map["grid"].data = (-1 *np.ones(map["map_metadata"].height*map["map_metadata"].width, np.int_)).tolist()
+        # Transform from the world frame to the matrix
+        point /= map["map_metadata"].resolution
+        point = point.astype(int)
+        column = offset[1] + point[0]
+        row = offset[0] + point[1]
+        
+
+        index = row*map["map_metadata"].width + column
+        if index < len(map["grid"].data):
+            map["grid"].data[index] += 10
+
+            if  map["grid"].data[index] > 100:
+                map["grid"].data[index] = 100
+
+        
+
+def publish_map():
+    global map
 
     # Define map header and info
     map["grid"].header.stamp = rospy.Time.now()
@@ -177,19 +216,9 @@ def update_map():
     map["pose"].header.stamp = rospy.Time.now()
     map["pose"].header.frame_id = "map"
     
-    # Find the current pose estimate
-    pose = get_current_pose_estimate()
-    map["pose"].pose.position.x = pose[0]
-    map["pose"].pose.position.y = pose[1]
-    rot = euler_angle_to_quaternion(0, 0, pose[2])
-    map["pose"].pose.orientation.x = rot["x"]
-    map["pose"].pose.orientation.y = rot["y"]
-    map["pose"].pose.orientation.z = rot["z"]
-    map["pose"].pose.orientation.w = rot["w"]
-    
     # Publish new map and pose
-    """ publishers["map_metadata"].publish(map["map_metadata"])
-    publishers["grid"].publish(map["grid"]) """
+    publishers["map_metadata"].publish(map["map_metadata"])
+    publishers["grid"].publish(map["grid"])
     publishers["pose"].publish(map["pose"])
 
 def main():
@@ -224,6 +253,20 @@ def main():
         "map_metadata": MapMetaData(),
         "pose": PoseStamped()
     }
+
+    # Needs to expand if the map grows larger
+    map["map_metadata"].height = 832 
+    map["map_metadata"].width = 832 
+
+    
+    map["map_metadata"].resolution = 0.05 
+
+    # So the map appear on the middle of the RViz frame
+    map["map_metadata"].origin.position.x = -(map["map_metadata"].width // 2) * map["map_metadata"].resolution
+    map["map_metadata"].origin.position.y = -(map["map_metadata"].height // 2)  * map["map_metadata"].resolution
+
+    # Initialize map
+    map["grid"].data = (0 *np.ones(map["map_metadata"].height*map["map_metadata"].width, np.int_)).tolist()
 
 
     print("Fast Slam Node initialized, now listening for scans and odometry to update the current estimated map and pose")
