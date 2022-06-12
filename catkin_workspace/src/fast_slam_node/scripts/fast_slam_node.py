@@ -109,11 +109,26 @@ def odom_callback(data):
     rot = quaternion_to_euler_angle(rot["w"], rot["x"], rot["y"], rot["z"])
 
     # Get odometry by subtracting the current pose from the last pose estimation
-    displacement = np.array([pos["x"], pos["y"], rot["z"]]) - last_pose_estimate
+    temp = [0, 0]
+    temp[0] = pos["x"] - last_pose_estimate[0]
+    temp[1] = pos["y"] - last_pose_estimate[1]
+
+    # Distance according to the odom
+    norm = np.sqrt(temp[0] ** 2 + temp[1] ** 2)
+
+    # Estimated angle
+    angle = get_current_pose_estimate()[2]
+    
+    temp[0] = norm * np.cos(angle)
+    temp[1] = norm * np.sin(angle)
+    displacement = np.array([temp[0], temp[1], rot["z"] - last_pose_estimate[2]])
     last_pose_estimate = np.array([pos["x"], pos["y"], rot["z"]])
 
+    """  Get odometry by subtracting the current pose from the last pose estimation
+    displacement = np.array([pos["x"], pos["y"], rot["z"]]) - last_pose_estimate """
+
     # Update particles position if particle moved (needs to be changed to a more realistic threshold)
-    if pos["x"] > 0 or pos["y"] > 0 or rot["z"] > 0:
+    if pos["x"] > 0.1 or pos["y"] > 0.1 or rot["z"] > 0.05:
         pf.sample_pose(displacement, odom_covariance)
 
 def scan_callback(data):
