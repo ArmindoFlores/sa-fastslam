@@ -65,7 +65,7 @@ def main(t="ls", save=False):
             # else:
             positions[i] = np.array([pos["x"], pos["y"], rot_euler[2]])
             t[i] = odom_info["header"]["stamp"]
-
+        positions -= positions[0]
         
         scans = []
         for scan in tqdm.tqdm(scan_files, desc="Loading scan files"):           
@@ -77,8 +77,14 @@ def main(t="ls", save=False):
         
         active_scan = None
         new_scan = False
-        for i in range(1, len(odoms)):
-            pose_estimate = positions[i] - positions[i-1]
+        for i in tqdm.tqdm(range(1, len(odoms))):
+            c, s = np.cos(positions[i-1][2]), np.sin(positions[i-1][2])
+            tmat = np.array([
+                [c, s, 0],
+                [s, c, 0],
+                [0, 0, 1]
+            ])
+            pose_estimate = tmat.dot(positions[i] - positions[i-1])
             
             new_scan = False
             if active_scan is None or (active_scan < len(scans) - 2 and scans[active_scan+1]["header"]["stamp"] < t[i]):
@@ -93,8 +99,10 @@ def main(t="ls", save=False):
                 pf.sample_pose(pose_estimate, np.array([0.001, 0.001, 0.00005]))
             
             img = np.ones((IMG_SIZE, IMG_SIZE), dtype=np.uint8) * 255
-            scale_factor = IMG_SIZE // 10
-            offset = np.array([IMG_SIZE // 2, IMG_SIZE // 2])
+            ax1_scale_factor = IMG_SIZE // 30
+            ax2_scale_factor = IMG_SIZE // 10
+            ax1_offset = np.array([40, IMG_SIZE - 40])
+            ax2_offset = np.array([IMG_SIZE // 2, IMG_SIZE // 2])
             
             if active_scan is not None:
                 scan_info = scans[active_scan]
@@ -110,7 +118,7 @@ def main(t="ls", save=False):
                     theta = scan_info["angle_min"] + scan_info["angle_increment"] * j
                     index = np.array((r * np.cos(theta), r * np.sin(theta)))
                     
-                    index = np.round(index * scale_factor + offset).astype(np.int32)
+                    index = np.round(index * ax2_scale_factor + ax2_offset).astype(np.int32)
                     if 0 <= index[1] < img.shape[0] and 0 <= index[0] < img.shape[1]:
                         img[index[1]][index[0]] = 0
             
@@ -130,31 +138,36 @@ def main(t="ls", save=False):
             for particle in pf.particles:
                 if best.weight < particle.weight:
                     best = particle
-                position = particle.pose[:2] * (scale_factor / 5) + offset
+                position = particle.pose[:2] * ax1_scale_factor + ax1_offset
                 ax1.plot(position[0], position[1], "go", markersize=3, alpha=0.1)
 
             # Display cloud center of mass
-            position = np.array([0, 0], dtype=np.float64)
+            position = np.array([0, 0, 0], dtype=np.float64)
             for particle in pf.particles:
-                position += particle.pose[:2]
+                position += particle.pose
             position /= len(pf.particles)
-            position = position * (scale_factor / 5) + offset
-            ax1.plot(position[0], position[1], "ro", markersize=3, alpha=0.99)
-
-            print("Best particle:", best)
+            
+            odom_position = positions[i].copy()
+            odom_position[:2] = odom_position[:2] * ax1_scale_factor + ax1_offset
+            
+            position[:2] = position[:2] * ax1_scale_factor + ax1_offset
+            ax1.plot(position[0], position[1], "ro", markersize=3)
+            ax1.plot([position[0], position[0]+20*np.cos(position[2])], [position[1], position[1]+20*np.sin(position[2])], "r")
+            
+            ax1.plot(odom_position[0], odom_position[1], "bo", markersize=3)
+            ax1.plot([odom_position[0], odom_position[0]+20*np.cos(odom_position[2])], [odom_position[1], odom_position[1]+20*np.sin(odom_position[2])], "b")
                 
             for ekf in best.landmark_matcher.valid_landmarks:
                 landmark = ekf.landmark
                 m = -landmark.equation[0] / landmark.equation[1]
-                b = -landmark.equation[2] / landmark.equation[1] * scale_factor / 5
-                b = -m * offset[0] + b + offset[1]
+                b = -landmark.equation[2] / landmark.equation[1] * ax1_scale_factor
+                b = -m * ax1_offset[0] + b + ax1_offset[1]
                 start = (0, b)
                 end = (IMG_SIZE, m * IMG_SIZE + b)
                 ax1.plot([start[0], end[0]], [start[1], end[1]], "g")
                 
             if new_scan:
                 pf.resample(pf.N)
-                print("Resampled")
             
             # ax1.set_title(f"Landmarks seen: {len(landmarks)}")
             ax1.set_xlabel("x [m]")
@@ -169,7 +182,7 @@ def main(t="ls", save=False):
             # print(len(matcher.landmarks))
             
             if save:
-                plt.savefig(f"output/ls{str(n+1).zfill(3)}.png")
+                plt.savefig(f"output/ls{str(n+1).zfill(4)}.png")
             else:
                 plt.pause(0.01)
             ax1.clear()

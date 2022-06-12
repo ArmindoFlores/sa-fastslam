@@ -259,5 +259,5 @@ def extract_landmarks(ls, T=0.25, N=400, C=18, X=0.02, D=10, S=6):
                 break
         else:
             landmarks.append((nlandmark, r2))
-    print(f"Seen landmarks: {len(landmarks)}")
+    # print(f"Seen landmarks: {len(landmarks)}")
     return [l[0]for l in landmarks]
