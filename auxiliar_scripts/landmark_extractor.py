@@ -244,7 +244,7 @@ def extract_features(ls, N=400, C=22, X=0.02, D=10, S=6):
                     pass
     return features
 
-def extract_landmarks(ls, T=0.25, N=400, C=22, X=0.02, D=10, S=6):
+def extract_landmarks(ls, T=0.25, N=400, C=18, X=0.02, D=10, S=6):
     """Extract a list of landmarks from a laser scan `ls`"""
     features = extract_features(ls, N=N, C=C, X=X, D=D, S=S)
     landmarks = []

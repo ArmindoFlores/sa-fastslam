@@ -73,7 +73,7 @@ def main(t="ls", save=False):
                 scan_info = pickle.load(f)
                 scans.append(scan_info)
                 
-        pf = particle_filter.ParticleFilter(200, np.array([[0.01, 0], [0, 0.0003]]))
+        pf = particle_filter.ParticleFilter(200, np.array([[0.02, 0], [0, 0.0003]]))
         
         active_scan = None
         new_scan = False
@@ -89,8 +89,8 @@ def main(t="ls", save=False):
                 new_scan = True
             
             # Update particle filter with new odometry data
-            if np.sum(pose_estimate) > 0.0001:
-                pf.sample_pose(pose_estimate, np.array([0.005, 0.005, 0.001]))
+            if np.sum(np.abs(pose_estimate)) > 0.0001:
+                pf.sample_pose(pose_estimate, np.array([0.001, 0.001, 0.00005]))
             
             img = np.ones((IMG_SIZE, IMG_SIZE), dtype=np.uint8) * 255
             scale_factor = IMG_SIZE // 10
@@ -130,30 +130,23 @@ def main(t="ls", save=False):
             for particle in pf.particles:
                 if best.weight < particle.weight:
                     best = particle
-                position = particle.pose[:2] * scale_factor + offset
+                position = particle.pose[:2] * (scale_factor / 5) + offset
                 ax1.plot(position[0], position[1], "go", markersize=3, alpha=0.1)
 
-            # Print best particle in red
-            """ bestPose = [0,0]
-            position = [0,0]
-            counter = 0
+            # Display cloud center of mass
+            position = np.array([0, 0], dtype=np.float64)
             for particle in pf.particles:
-                if particle.weight > best.weight * 0.9:
-                    bestPose[0] += particle.pose[0]
-                    bestPose[1] += particle.pose[1]
-                    counter += 1
-            position1[0] = bestPose[0]/counter * scale_factor + offset
-            position1[1] = bestPose[0]/counter * scale_factor + offset
-            ax1.plot(position[0], position[1], "yo", markersize=3, alpha=0.99) """
-            position = best.pose[:2] * scale_factor + offset
+                position += particle.pose[:2]
+            position /= len(pf.particles)
+            position = position * (scale_factor / 5) + offset
             ax1.plot(position[0], position[1], "ro", markersize=3, alpha=0.99)
-                
+
             print("Best particle:", best)
                 
             for ekf in best.landmark_matcher.valid_landmarks:
                 landmark = ekf.landmark
                 m = -landmark.equation[0] / landmark.equation[1]
-                b = -landmark.equation[2] / landmark.equation[1] * scale_factor
+                b = -landmark.equation[2] / landmark.equation[1] * scale_factor / 5
                 b = -m * offset[0] + b + offset[1]
                 start = (0, b)
                 end = (IMG_SIZE, m * IMG_SIZE + b)
