@@ -193,7 +193,7 @@ def update_map(ranges, angle_increment, min_angle):
 
         index = point[0]*map["map_metadata"].width + point[1]
         if index < len(map["grid"].data):
-            map["grid"].data[index] += 5
+            map["grid"].data[index] += 25
 
             if  map["grid"].data[index] > 100:
                 map["grid"].data[index] = 100
@@ -259,8 +259,8 @@ def main():
 
     # So the map appear on the middle of the RViz referential
     #map["map_metadata"].origin.orientation.w = 1.0
-    map["map_metadata"].origin.position.x = (map["map_metadata"].width // 2) * map["map_metadata"].resolution
-    map["map_metadata"].origin.position.y = (map["map_metadata"].height // 2)  * map["map_metadata"].resolution
+    map["map_metadata"].origin.position.x = -(map["map_metadata"].width // 2) * map["map_metadata"].resolution
+    map["map_metadata"].origin.position.y = -(map["map_metadata"].height // 2)  * map["map_metadata"].resolution
 
     # Initialize map
     map["grid"].data = (-1 *np.ones(map["map_metadata"].height*map["map_metadata"].width, np.int_)).tolist()
