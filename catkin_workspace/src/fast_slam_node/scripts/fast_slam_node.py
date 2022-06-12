@@ -209,12 +209,12 @@ def publish_map():
 
     # Define map header and info
     map["grid"].header.stamp = rospy.Time.now()
-    map["grid"].header.frame_id = "base_footprint"
+    map["grid"].header.frame_id = "map"
     map["grid"].info = map["map_metadata"]
 
     # Define pose header
     map["pose"].header.stamp = rospy.Time.now()
-    map["pose"].header.frame_id = "base_footprint"
+    map["pose"].header.frame_id = "map"
     
     # Publish new map and pose
     publishers["map_metadata"].publish(map["map_metadata"])
