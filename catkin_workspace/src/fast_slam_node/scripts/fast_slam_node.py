@@ -10,6 +10,12 @@ from landmark_extractor import  *
 from landmark_matching import  *
 import numpy as np
 
+def to_cartesian(theta, r):
+    if r > 0.001:
+        return r * np.array((math.cos(theta), math.sin(theta)))
+    
+    return None
+
 def get_current_pose_estimate():
     """ Looks for the particle with the most `weight` and extracts his `pose` """
 
@@ -153,15 +159,15 @@ def update_map(ranges, angle_increment, min_angle):
     """ Update grid map and pose estimate """
     global map
 
-    # Offset from the matrix to the referencial
-    offset = np.array(map["map_metadata"].width // 2, map["map_metadata"].height // 2 )
+    # Offset from the matrix to the referential
+    offset = np.array([map["map_metadata"].width // 2, map["map_metadata"].height // 2 ])
 
     # Find the current pose estimate
     pose = get_current_pose_estimate()
     rot = euler_angle_to_quaternion(0, 0, pose[2])
 
     # Update pose
-    map["pose"].pose.position.x = pose[0]
+    map["pose"].pose.position.x = pose[0] 
     map["pose"].pose.position.y = pose[1]
     map["pose"].pose.orientation.x = rot["x"]
     map["pose"].pose.orientation.y = rot["y"]
@@ -171,16 +177,28 @@ def update_map(ranges, angle_increment, min_angle):
     angle = min_angle + pose[2]
     for r in ranges:
         point = to_cartesian(angle, r)
+        angle += angle_increment
+
+        if point is None:
+            continue
+        
+        # Get the point on the world referential
         point += np.array_split(pose, 2)[0]
+
+        # Transform from the referential to the matrix
+        point /= map["map_metadata"].resolution
         point += offset
+        
         point = point.astype(int)
 
-        map["grid"].data[point[0]][point[1]] += 5
+        index = point[0]*map["map_metadata"].width + point[1]
+        if index < len(map["grid"].data):
+            map["grid"].data[index] += 5
 
-        if  map["grid"].data[point[0]][point[1]] > 100:
-            map["grid"].data[point[0]][point[1]] = 100
+            if  map["grid"].data[index] > 100:
+                map["grid"].data[index] = 100
+
         
-        angle += angle_increment
 
 def publish_map():
     global map
@@ -236,13 +254,13 @@ def main():
     map["map_metadata"].height = 832 
     map["map_metadata"].width = 832 
 
-    # Is it constant?
+    
     map["map_metadata"].resolution = 0.05 
 
-    # Copied from rosbags so the map appear on the middle of the RViz referencial
-    map["map_metadata"].origin.orientation.w = 1.0
-    map["map_metadata"].origin.position.x = -10.0
-    map["map_metadata"].origin.position.y = -10.0
+    # So the map appear on the middle of the RViz referential
+    #map["map_metadata"].origin.orientation.w = 1.0
+    map["map_metadata"].origin.position.x = (map["map_metadata"].width // 2) * map["map_metadata"].resolution
+    map["map_metadata"].origin.position.y = (map["map_metadata"].height // 2)  * map["map_metadata"].resolution
 
     # Initialize map
     map["grid"].data = (-1 *np.ones(map["map_metadata"].height*map["map_metadata"].width, np.int_)).tolist()
