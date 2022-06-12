@@ -80,8 +80,6 @@ class ParticleFilter:
         # Not the best method
         n1 = round(frac * N)
         n2 = N - n1
-        if np.std(np.array([particle.weight for particle in self.particles])) < 1:
-            return
         total_weight = sum((particle.weight for particle in self.particles))
         if total_weight == 0 or np.isnan(total_weight):
             for particle in self.particles:
