@@ -15,7 +15,7 @@ class Particle:
             self.pose = np.array(pose, dtype=np.float64)
         self.weight = 1
         self.Qt = Qt
-        self.landmark_matcher = landmark_matching.LandmarkMatcher(Qt=Qt, distance_threshold=0.2, max_invalid_landmarks=15)
+        self.landmark_matcher = landmark_matching.LandmarkMatcher(Qt=Qt, distance_threshold=0.3, max_invalid_landmarks=15)
         
     def __repr__(self):
         return f"<Particle pose={tuple(np.round(self.pose, 3))} weight={round(self.weight, 3)}>"

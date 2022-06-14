@@ -36,7 +36,7 @@ def transform_landmark(landmark, position, rotmat):
         c = start[0] - b * start[1]
     return landmark_extractor.Landmark(a, b, c, start, end, landmark._r2)
 
-def main(t="ls", save=False):
+def main(t="ls", save=True):
     global positions
     scan_files = loader.from_dir(SCANS_DIR, "ls")
     try:
@@ -75,6 +75,7 @@ def main(t="ls", save=False):
                 
         pf = particle_filter.ParticleFilter(200, np.array([[0.02, 0], [0, 0.0003]]))
         
+        prev_landmarks = []
         active_scan = None
         new_scan = False
         for i in tqdm.tqdm(range(1, len(odoms))):
@@ -96,7 +97,7 @@ def main(t="ls", save=False):
             
             # Update particle filter with new odometry data
             if np.sum(np.abs(pose_estimate)) > 0.0001:
-                pf.sample_pose(pose_estimate, np.array([0.001, 0.001, 0.00005]))
+                pf.sample_pose(pose_estimate, np.array([0.001, 0.001, 0.001]))
             
             img = np.ones((IMG_SIZE, IMG_SIZE), dtype=np.uint8) * 255
             ax1_scale_factor = IMG_SIZE // 30
@@ -113,6 +114,7 @@ def main(t="ls", save=False):
                     )
                     if len(landmarks) != 0:
                         pf.observe_landmarks(landmarks, H)
+                    prev_landmarks = landmarks
                                     
                 for j, r in enumerate(scan_info["ranges"]):
                     theta = scan_info["angle_min"] + scan_info["angle_increment"] * j
@@ -133,6 +135,14 @@ def main(t="ls", save=False):
             # ax1.set_ylim([-3, 3])
             # ax2.set_xlim([-3, 3])
             # ax2.set_ylim([-3, 3])
+            
+            for landmark in prev_landmarks:
+                m = -landmark.equation[0] / landmark.equation[1]
+                b = -landmark.equation[2] / landmark.equation[1] * ax2_scale_factor
+                b = -m * ax2_offset[0] + b + ax2_offset[1]
+                start = (0, b)
+                end = (IMG_SIZE, m * IMG_SIZE + b)
+                ax2.plot([start[0], end[0]], [start[1], end[1]], "g")
             
             best = pf.particles[0]
             for particle in pf.particles:
@@ -164,7 +174,7 @@ def main(t="ls", save=False):
                 b = -m * ax1_offset[0] + b + ax1_offset[1]
                 start = (0, b)
                 end = (IMG_SIZE, m * IMG_SIZE + b)
-                ax1.plot([start[0], end[0]], [start[1], end[1]], "g")
+                ax1.plot([start[0], end[0]], [start[1], end[1]], "black")
                 
             if new_scan:
                 pf.resample(pf.N)
