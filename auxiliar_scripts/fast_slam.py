@@ -164,8 +164,8 @@ def update(n, state):
             if best_particle is None or particle.weight > best_particle.weight:
                 best_particle = particle
         state["matches"] = best_particle.landmark_matcher.valid_landmarks
-        print("\n".join(map(lambda l: str(l.landmark), best_particle.landmark_matcher.valid_landmarks)))
-        print("Mapped landmarks:", len(best_particle.landmark_matcher.valid_landmarks))
+        # print("\n".join(map(lambda l: str(l.landmark), best_particle.landmark_matcher.valid_landmarks)))
+        # print("Mapped landmarks:", len(best_particle.landmark_matcher.valid_landmarks))
         
         state["particle_filter"].resample(frac=0.8)
             

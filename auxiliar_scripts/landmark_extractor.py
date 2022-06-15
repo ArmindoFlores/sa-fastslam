@@ -41,6 +41,7 @@ class Landmark:
         
     def update_params(self, params):
         new_params = self.params() + params
+        new_params[1] %= (2 * np.pi)
         
         sign = 1 if 0 <= new_params[1] < np.pi else -1
         if not np.isclose(abs(new_params[1]), np.pi):
@@ -92,7 +93,7 @@ class Landmark:
         r = abs(c) / np.sqrt(a**2 + b**2)
         d = r - pose[0] * np.cos(theta) - pose[1] * np.sin(theta)
         phi = theta - pose[2]
-        return np.array([d, phi])
+        return np.array([d, phi % (2 * np.pi)])
     
     @property
     def start(self):

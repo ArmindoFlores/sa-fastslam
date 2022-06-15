@@ -15,6 +15,11 @@ class KalmanFilter:
     def update(self, z_measured, z_predicted, H):
         Q = H.dot(self.covariance).dot(H.T) + self.Qt # * (2 - landmark.r2)
         K = self.covariance.dot(H.T).dot(np.linalg.inv(Q))
+        if np.isclose(abs(z_measured[1] - z_predicted[1]), 2 * np.pi, 0.5):
+            if z_measured[1] > z_predicted[1]:
+                z_measured[1] -= 2 * np.pi
+            else:
+                z_predicted[1] -= 2 * np.pi
         self.landmark.update_params(K.dot(z_measured - z_predicted))
         self.covariance -= K.dot(H).dot(self.covariance)
 
@@ -53,7 +58,7 @@ class LandmarkMatcher:
                 closest = {"difference": ld, "filter": ekf}
         if closest is not None:
             # Found a match
-            closest["filter"].update(new_params, closest["filter"].landmark.params(), H)
+            closest["filter"].update(worldspace_landmark.params(), closest["filter"].landmark.params(), H)
             closest["filter"].landmark.count += 1
             self._landmarks[i][0] = time.time()
             
@@ -73,12 +78,10 @@ class LandmarkMatcher:
                 if landmark.count < self.minimum_observations:
                     if to_remove is None:
                         to_remove = (i, age)
-                    elif self._landmarks[to_remove[0]][1].landmark.count > landmark.count:
-                        to_remove = (i, age)
-                    elif self._landmarks[to_remove[0]][1].landmark.count == landmark.count and to_remove[1] > age:
+                    elif self._landmarks[to_remove[0]][1].landmark.count == landmark.count and to_remove[1] < age:
                         to_remove = (i, age)
             if to_remove is not None:
-                self._landmarks.pop(to_remove[0])       
+                self._landmarks.pop(to_remove[0])
         return match
     
     @property

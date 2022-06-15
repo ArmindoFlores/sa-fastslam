@@ -1,4 +1,5 @@
 import numpy as np
+from sklearn.metrics import max_error
 
 import landmark_matching
 
@@ -15,7 +16,7 @@ class Particle:
             self.pose = np.array(pose, dtype=np.float64)
         self.weight = 1
         self.Qt = Qt
-        self.landmark_matcher = landmark_matching.LandmarkMatcher(Qt=Qt, distance_threshold=0.3, max_invalid_landmarks=15)
+        self.landmark_matcher = landmark_matching.LandmarkMatcher(Qt=Qt, distance_threshold=0.3, max_invalid_landmarks=8)
         
     def __repr__(self):
         return f"<Particle pose={tuple(np.round(self.pose, 3))} weight={round(self.weight, 3)}>"
@@ -27,6 +28,8 @@ class Particle:
         match = self.landmark_matcher.observe(landmark, H_func(*self.pose), self.pose)
         if match is not None:
             self.weigh(landmark.params(), match, H_func(*self.pose))
+            return True
+        return False
     
     def set_weight(self, weight):
         """Set the particle's weight to `weight`."""
@@ -34,7 +37,13 @@ class Particle:
 
     def update_pose(self, odom, variance):
         """Update pose (AKA move the particle) according to odometry data `odom` and variance `variance`."""
-        self.pose += np.random.normal(odom, np.sqrt(variance)).reshape(self.pose.shape)
+        c, s = np.cos(self.pose[2]), np.sin(self.pose[2])
+        tmat = np.array([
+            [c, s, 0],
+            [s, c, 0],
+            [0, 0, 1]
+        ])
+        self.pose += np.random.normal(tmat.dot(odom), np.sqrt(variance)).reshape(self.pose.shape)
 
     def weigh(self, z_measured, match, H):
         """Weigh the particle's importance after observing a new landmark.
@@ -68,6 +77,7 @@ class ParticleFilter:
     def observe_landmarks(self, landmarks, H_func):
         """Inform every particle of landmark observations and update their weights accordingly."""
         for particle in self.particles:
+            # print([ekf.landmark for ekf in particle.landmark_matcher.landmarks])
             for landmark in landmarks:
                 particle.observe_landmark(landmark, H_func)
 

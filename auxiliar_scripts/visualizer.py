@@ -36,7 +36,7 @@ def transform_landmark(landmark, position, rotmat):
         c = start[0] - b * start[1]
     return landmark_extractor.Landmark(a, b, c, start, end, landmark._r2)
 
-def main(t="ls", save=True):
+def main(t="ls", save=True, display=True):
     global positions
     scan_files = loader.from_dir(SCANS_DIR, "ls")
     try:
@@ -73,12 +73,12 @@ def main(t="ls", save=True):
                 scan_info = pickle.load(f)
                 scans.append(scan_info)
                 
-        pf = particle_filter.ParticleFilter(200, np.array([[0.02, 0], [0, 0.0003]]))
+        pf = particle_filter.ParticleFilter(200, np.array([[0.01, 0], [0, 0.003]]), (0, 0, 0))
         
         prev_landmarks = []
         active_scan = None
         new_scan = False
-        for i in tqdm.tqdm(range(1, len(odoms))):
+        for i in tqdm.tqdm(range(1300, len(odoms))):
             c, s = np.cos(positions[i-1][2]), np.sin(positions[i-1][2])
             tmat = np.array([
                 [c, s, 0],
@@ -88,7 +88,7 @@ def main(t="ls", save=True):
             pose_estimate = tmat.dot(positions[i] - positions[i-1])
             
             new_scan = False
-            if active_scan is None or (active_scan < len(scans) - 2 and scans[active_scan+1]["header"]["stamp"] < t[i]):
+            while active_scan is None or (active_scan < len(scans) - 2 and scans[active_scan+1]["header"]["stamp"] < t[i]):
                 if active_scan is None:
                     active_scan = 0
                 else:
@@ -145,11 +145,23 @@ def main(t="ls", save=True):
                 ax2.plot([start[0], end[0]], [start[1], end[1]], "g")
             
             best = pf.particles[0]
+            max_n_landmarks = 0
+            max_n_valid_landmarks = 0
             for particle in pf.particles:
                 if best.weight < particle.weight:
                     best = particle
+                    
+                l1 = len(particle.landmark_matcher.landmarks)
+                l2 = len(particle.landmark_matcher.valid_landmarks)
+                if l1 > max_n_landmarks:
+                    max_n_landmarks = l1
+                if l2 > max_n_valid_landmarks:
+                    max_n_valid_landmarks = l2
                 position = particle.pose[:2] * ax1_scale_factor + ax1_offset
                 ax1.plot(position[0], position[1], "go", markersize=3, alpha=0.1)
+
+            # if new_scan:
+                # print(f"\nMax landmarks: {max_n_landmarks}\nMax valid landmarks: {max_n_valid_landmarks}")
 
             # Display cloud center of mass
             position = np.array([0, 0, 0], dtype=np.float64)
@@ -193,7 +205,7 @@ def main(t="ls", save=True):
             
             if save:
                 plt.savefig(f"output/ls{str(n+1).zfill(4)}.png")
-            else:
+            if display:
                 plt.pause(0.01)
             ax1.clear()
             ax2.clear()
