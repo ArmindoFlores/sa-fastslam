@@ -6,7 +6,7 @@ import zipfile
 import colorama
 import requests
 
-SERVER = "sigma02.ist.utl.pt"
+SERVER = "sigma03.ist.utl.pt"
 PORT = 53764
 
 
@@ -21,7 +21,10 @@ def main(ns):
         print("[+] Sending to server...")
         with open(os.path.join(temp_dir, "scripts.zip"), "rb") as zf:
             try:
-                r = requests.post(f"http://{SERVER}:{PORT}/run?email={ns.email}", files={"scripts.zip": zf})
+                query = f"email={ns.email}"
+                if ns.tag is not None:
+                    query += f"&tag={ns.tag}"
+                r = requests.post(f"http://{SERVER}:{PORT}/run?{query}", files={"scripts.zip": zf})
             except requests.ConnectionError:
                 print(f"{colorama.Fore.RED}[!] Error: server is unreachable{colorama.Style.RESET_ALL}")
                 return
@@ -34,5 +37,6 @@ def main(ns):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run FastSLAM simulation remotely")
     parser.add_argument("email", type=str, help="e-mail of the recipient")
+    parser.add_argument("--tag,-t", type=str, help="tag associated with this simulation")
     ns = parser.parse_args()
     main(ns)
