@@ -1,5 +1,4 @@
 import numpy as np
-from sklearn.metrics import max_error
 
 import landmark_matching
 

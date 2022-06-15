@@ -11,6 +11,7 @@ PORT = 53764
 
 
 def main(ns):
+    print(ns)
     with tempfile.TemporaryDirectory() as temp_dir:
         print("[+] Compressing scripts...")
         with zipfile.ZipFile(os.path.join(temp_dir, "scripts.zip"), "w") as zf:
@@ -37,6 +38,6 @@ def main(ns):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run FastSLAM simulation remotely")
     parser.add_argument("email", type=str, help="e-mail of the recipient")
-    parser.add_argument("--tag,-t", type=str, help="tag associated with this simulation")
+    parser.add_argument("--tag", type=str, help="tag associated with this simulation")
     ns = parser.parse_args()
     main(ns)

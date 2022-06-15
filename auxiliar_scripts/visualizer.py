@@ -36,7 +36,7 @@ def transform_landmark(landmark, position, rotmat):
         c = start[0] - b * start[1]
     return landmark_extractor.Landmark(a, b, c, start, end, landmark._r2)
 
-def main(t="ls", save=True, display=True):
+def main(t="ls", save=True, display=False):
     global positions
     scan_files = loader.from_dir(SCANS_DIR, "ls")
     try:
@@ -78,7 +78,7 @@ def main(t="ls", save=True, display=True):
         prev_landmarks = []
         active_scan = None
         new_scan = False
-        for i in tqdm.tqdm(range(1300, len(odoms))):
+        for i in tqdm.tqdm(range(8000, len(odoms))):
             c, s = np.cos(positions[i-1][2]), np.sin(positions[i-1][2])
             tmat = np.array([
                 [c, s, 0],
@@ -110,7 +110,8 @@ def main(t="ls", save=True, display=True):
                 
                 if new_scan:
                     landmarks = landmark_extractor.extract_landmarks(
-                        scan_info
+                        scan_info,
+                        N=500
                     )
                     if len(landmarks) != 0:
                         pf.observe_landmarks(landmarks, H)
