@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import rospy
 from nav_msgs.msg import Odometry, OccupancyGrid, MapMetaData
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseArray, Pose
 from sensor_msgs.msg import LaserScan
 import sys
 sys.path.insert(1, 'auxiliar_scripts')
@@ -20,15 +20,44 @@ def get_current_pose_estimate():
     """ Calculates center of mass of the particles """
 
     # Calculate total weight
-    total_weight = 0
+    """ total_weight = 0
     for p in pf.particles:
-        total_weight += p.weight
+        total_weight += p.weight """
+    global N_particles
     
     pose = np.array([.0, .0, .0])
-    for p in pf.particles:
-        pose += p.weight * p.pose / total_weight
 
-    return pose
+    # Init variables
+    temp_pose = Pose()
+    pose_array = PoseArray()
+    temp_pose.position.x = 0 
+    temp_pose.position.y = 0
+    rot = euler_angle_to_quaternion(0, 0, 0)
+    temp_pose.orientation.x = rot["x"]
+    temp_pose.orientation.y = rot["y"]
+    temp_pose.orientation.z = rot["z"]
+    temp_pose.orientation.w = rot["w"]
+
+    # Just for debug
+    for i in range(N_particles):
+        pose_array.poses.append(temp_pose)
+
+    i = 0
+    for i in range(N_particles):
+        # For pose array
+        pose_array.poses[i].position.x = pf.particles[i].pose[0]
+        pose_array.poses[i].position.y = pf.particles[i].pose[1]
+        rot = euler_angle_to_quaternion(0, 0, pf.particles[i].pose[2])
+        pose_array.poses[i].orientation.x = rot["x"]
+        pose_array.poses[i].orientation.y = rot["y"]
+        pose_array.poses[i].orientation.z = rot["z"]
+        pose_array.poses[i].orientation.w = rot["w"]
+
+        # For average pose
+        pose += pf.particles[i].pose
+    
+
+    return pose / N_particles, pose_array
 
 def euler_angle_to_quaternion(X, Y, Z):
     """
@@ -62,7 +91,7 @@ def H(xr, yr, tr):
     return np.array([[1, xr * np.sin(tr) - yr * np.cos(tr)], [0, 1]])
 
 def odom_callback(data):
-    global last_pose_estimate
+    global last_pose_estimate, N_particles
     odom = {
         "header": {
             "seq": data.header.seq,
@@ -117,7 +146,10 @@ def odom_callback(data):
     norm = np.sqrt(temp[0] ** 2 + temp[1] ** 2)
 
     # Estimated angle
-    angle = get_current_pose_estimate()[2]
+    angle = 0
+    for p in pf.particles:
+        angle += p.pose[2]
+    angle = angle / N_particles
     
     temp[0] = norm * np.cos(angle)
     temp[1] = norm * np.sin(angle)
@@ -181,7 +213,7 @@ def update_map(ranges, angle_increment, min_angle):
     offset = np.array([map["map_metadata"].width // 2, map["map_metadata"].height // 2 ])
 
     # Find the current pose estimate
-    pose = get_current_pose_estimate()
+    pose, pose_array = get_current_pose_estimate()
     rot = euler_angle_to_quaternion(0, 0, pose[2])
 
     # Update pose
@@ -191,6 +223,9 @@ def update_map(ranges, angle_increment, min_angle):
     map["pose"].pose.orientation.y = rot["y"]
     map["pose"].pose.orientation.z = rot["z"]
     map["pose"].pose.orientation.w = rot["w"]
+
+    # Update pose_array
+    map["pose_array"] = pose_array
 
     angle = min_angle + pose[2]
     for r in ranges:
@@ -230,15 +265,20 @@ def publish_map():
     # Define pose header
     map["pose"].header.stamp = rospy.Time.now()
     map["pose"].header.frame_id = "map"
+
+    map["pose_array"].header.stamp = rospy.Time.now()
+    map["pose_array"].header.frame_id = "map"
     
     # Publish new map and pose
     publishers["map_metadata"].publish(map["map_metadata"])
     publishers["grid"].publish(map["grid"])
     publishers["pose"].publish(map["pose"])
+    publishers["pose_array"].publish(map["pose_array"])
 
 def main():
     global odom_covariance
     odom_covariance = np.array([0.005, 0.005, 0.001])
+    #odom_covariance = np.array([0.000, 0.000, 0.0000])
 
     global Qt
     Qt = np.array([[0.01, 0], [0, 0.0003]])
@@ -247,7 +287,9 @@ def main():
     last_pose_estimate = np.array([0, 0, 0])
 
     global pf 
-    pf = ParticleFilter(200, Qt)
+    global N_particles
+    N_particles = 150
+    pf = ParticleFilter(N_particles, Qt)
 
     global bag_initial_time 
     bag_initial_time = None
@@ -260,13 +302,15 @@ def main():
     publishers = {
         "grid": rospy.Publisher('map', OccupancyGrid, queue_size=10),
         "map_metadata": rospy.Publisher('map_metadata', MapMetaData, queue_size=10),
-        "pose": rospy.Publisher('pose', PoseStamped, queue_size=10)
+        "pose": rospy.Publisher('pose', PoseStamped, queue_size=10),
+        "pose_array": rospy.Publisher('pose_array', PoseArray, queue_size=10)
     }
     global map
     map = {
         "grid": OccupancyGrid(),
         "map_metadata": MapMetaData(),
-        "pose": PoseStamped()
+        "pose": PoseStamped(),
+        "pose_array": PoseArray()
     }
 
     # Needs to expand if the map grows larger
