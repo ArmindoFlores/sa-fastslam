@@ -19,45 +19,26 @@ def to_cartesian(theta, r):
 def get_current_pose_estimate():
     """ Calculates center of mass of the particles """
 
-    # Calculate total weight
-    """ total_weight = 0
-    for p in pf.particles:
-        total_weight += p.weight """
     global N_particles
+    global map
     
     pose = np.array([.0, .0, .0])
 
-    # Init variables
-    temp_pose = Pose()
-    pose_array = PoseArray()
-    temp_pose.position.x = 0 
-    temp_pose.position.y = 0
-    rot = euler_angle_to_quaternion(0, 0, 0)
-    temp_pose.orientation.x = rot["x"]
-    temp_pose.orientation.y = rot["y"]
-    temp_pose.orientation.z = rot["z"]
-    temp_pose.orientation.w = rot["w"]
-
-    # Just for debug
-    for i in range(N_particles):
-        pose_array.poses.append(temp_pose)
-
-    i = 0
     for i in range(N_particles):
         # For pose array
-        pose_array.poses[i].position.x = pf.particles[i].pose[0]
-        pose_array.poses[i].position.y = pf.particles[i].pose[1]
+        map["pose_array"].poses[i].position.x = pf.particles[i].pose[0]
+        map["pose_array"].poses[i].position.y = pf.particles[i].pose[1]
         rot = euler_angle_to_quaternion(0, 0, pf.particles[i].pose[2])
-        pose_array.poses[i].orientation.x = rot["x"]
-        pose_array.poses[i].orientation.y = rot["y"]
-        pose_array.poses[i].orientation.z = rot["z"]
-        pose_array.poses[i].orientation.w = rot["w"]
+        map["pose_array"].poses[i].orientation.x = rot["x"]
+        map["pose_array"].poses[i].orientation.y = rot["y"]
+        map["pose_array"].poses[i].orientation.z = rot["z"]
+        map["pose_array"].poses[i].orientation.w = rot["w"]
 
         # For average pose
         pose += pf.particles[i].pose
     
 
-    return pose / N_particles, pose_array
+    return pose / N_particles
 
 def euler_angle_to_quaternion(X, Y, Z):
     """
@@ -213,7 +194,7 @@ def update_map(ranges, angle_increment, min_angle):
     offset = np.array([map["map_metadata"].width // 2, map["map_metadata"].height // 2 ])
 
     # Find the current pose estimate
-    pose, pose_array = get_current_pose_estimate()
+    pose = get_current_pose_estimate()
     rot = euler_angle_to_quaternion(0, 0, pose[2])
 
     # Update pose
@@ -223,9 +204,6 @@ def update_map(ranges, angle_increment, min_angle):
     map["pose"].pose.orientation.y = rot["y"]
     map["pose"].pose.orientation.z = rot["z"]
     map["pose"].pose.orientation.w = rot["w"]
-
-    # Update pose_array
-    map["pose_array"] = pose_array
 
     angle = min_angle + pose[2]
     for r in ranges:
@@ -286,9 +264,10 @@ def main():
     global last_pose_estimate
     last_pose_estimate = np.array([0, 0, 0])
 
-    global pf 
     global N_particles
-    N_particles = 150
+    N_particles = 100
+
+    global pf 
     pf = ParticleFilter(N_particles, Qt)
 
     global bag_initial_time 
@@ -312,6 +291,10 @@ def main():
         "pose": PoseStamped(),
         "pose_array": PoseArray()
     }
+
+    # Initialize pose array
+    for i in range(N_particles):
+        map["pose_array"].poses.append(Pose())
 
     # Needs to expand if the map grows larger
     map["map_metadata"].height = 832 
