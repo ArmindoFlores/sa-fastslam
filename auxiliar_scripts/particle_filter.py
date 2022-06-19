@@ -71,6 +71,7 @@ class ProcessInfo:
     def work(self, particle):
         for landmark in self.landmarks:
             particle.observe_landmark(landmark, self.H_func)
+        return particle
 
 class ParticleFilter:
     """A class describing a particle filter."""
@@ -88,7 +89,7 @@ class ParticleFilter:
     def observe_landmarks(self, landmarks, H_func):
         """Inform every particle of landmark observations and update their weights accordingly."""
         pi = ProcessInfo(landmarks, H_func)
-        self.pool.map(pi.work, self.particles)
+        self.particles = self.pool.map(pi.work, self.particles)
 
     def resample(self, N=None, frac=0.8):
         """Compute the next generation of `N` particles based on the importance (weight) of the previous one.
