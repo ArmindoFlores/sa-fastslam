@@ -1,3 +1,5 @@
+import multiprocessing
+
 import numpy as np
 
 import landmark_matching
@@ -60,13 +62,23 @@ class Particle:
         new_particle = Particle(self.Qt.copy(), self.pose.copy())
         new_particle.landmark_matcher = self.landmark_matcher.copy()
         return new_particle
+    
+class ProcessInfo:
+    def __init__(self, landmarks, H_func):
+        self.landmarks = landmarks
+        self.H_func = H_func
+        
+    def work(self, particle):
+        for landmark in self.landmarks:
+            particle.observe_landmark(landmark, self.H_func)
 
 class ParticleFilter:
     """A class describing a particle filter."""
-    def __init__(self, N, Qt, initial_pose=(0, 0, 0)):
+    def __init__(self, N, Qt, initial_pose=(0, 0, 0), nprocesses=None):
         """Instatiate a new particle filter with `N` particles."""
         self.N = N
         self.particles = [Particle(Qt, initial_pose) for _ in range(N)]
+        self.pool = multiprocessing.Pool(nprocesses if nprocesses is not None else multiprocessing.cpu_count())
 
     def sample_pose(self, odom, variance):
         """Update the pose of every particle according to odometry data `odom` and variance `variance`."""
@@ -75,10 +87,8 @@ class ParticleFilter:
 
     def observe_landmarks(self, landmarks, H_func):
         """Inform every particle of landmark observations and update their weights accordingly."""
-        for particle in self.particles:
-            # print([ekf.landmark for ekf in particle.landmark_matcher.landmarks])
-            for landmark in landmarks:
-                particle.observe_landmark(landmark, H_func)
+        pi = ProcessInfo(landmarks, H_func)
+        self.pool.map(pi.work, self.particles)
 
     def resample(self, N=None, frac=0.8):
         """Compute the next generation of `N` particles based on the importance (weight) of the previous one.
