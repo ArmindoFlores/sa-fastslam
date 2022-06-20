@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from functools import total_ordering
 import rospy
 from nav_msgs.msg import Odometry, OccupancyGrid, MapMetaData
 from geometry_msgs.msg import PoseStamped, PoseArray, Pose
@@ -22,7 +23,10 @@ def get_current_pose_estimate():
     global N_particles
     global map
     
-    pose = np.array([.0, .0, .0])
+    #pose = np.array([.0, .0, .0])
+    max_weight = pf.particles[0].weight
+    pose = np.array([pf.particles[0].pose[0], pf.particles[0].pose[1], pf.particles[0].pose[2]])
+    
 
     for i in range(N_particles):
         # For pose array
@@ -33,12 +37,17 @@ def get_current_pose_estimate():
         map["pose_array"].poses[i].orientation.y = rot["y"]
         map["pose_array"].poses[i].orientation.z = rot["z"]
         map["pose_array"].poses[i].orientation.w = rot["w"]
+        if i != 0:
+            # get best particle
+            if pf.particles[i].weight > max_weight:
+                pose = np.array([pf.particles[i].pose[0], pf.particles[i].pose[1], pf.particles[i].pose[2]])
+                max_weight = pf.particles[i].weight
 
         # For average pose
-        pose += pf.particles[i].pose
+        #pose += pf.particles[i].pose
     
 
-    return pose / N_particles
+    return pose #pose / N_particles
 
 def euler_angle_to_quaternion(X, Y, Z):
     """
@@ -117,38 +126,22 @@ def odom_callback(data):
     rot = odom["pose"]["pose"]["orientation"]
 
     rot = quaternion_to_euler_angle(rot["w"], rot["x"], rot["y"], rot["z"])
+    pose = np.array([pos["x"], pos["y"], rot["z"]])
 
-    # Get odometry by subtracting the current pose from the last pose estimation
-    temp = [0, 0]
-    temp[0] = pos["x"] - last_pose_estimate[0]
-    temp[1] = pos["y"] - last_pose_estimate[1]
-
-    # Distance according to the odom
-    norm = np.sqrt(temp[0] ** 2 + temp[1] ** 2)
-
-    # Estimated angle
-    angle = 0
-    for p in pf.particles:
-        angle += p.pose[2]
-    angle = angle / N_particles
-    
-    temp[0] = norm * np.cos(angle)
-    temp[1] = norm * np.sin(angle)
-    displacement = np.array([temp[0], temp[1], rot["z"] - last_pose_estimate[2]])
-    last_pose_estimate = np.array([pos["x"], pos["y"], rot["z"]])
-
-    """  Get odometry by subtracting the current pose from the last pose estimation
-    displacement = np.array([pos["x"], pos["y"], rot["z"]]) - last_pose_estimate """
+    pose_estimate = pose - last_pose_estimate
+    last_pose_estimate = pose
 
     # Update particles position if particle moved (needs to be changed to a more realistic threshold)
     if pos["x"] > 0.1 or pos["y"] > 0.1 or rot["z"] > 0.05:
-        pf.sample_pose(displacement, odom_covariance)
+        pf.sample_pose(pose_estimate, odom_covariance)
 
 def scan_callback(data):
-    global bag_initial_time
+    global bag_initial_time, total_missed, total
 
+    total += 1
     if bag_initial_time is None:
         bag_initial_time = rospy.Time.now().to_sec() - data.header.stamp.to_sec()
+    
     
     time = rospy.Time.now().to_sec() - bag_initial_time
     
@@ -171,19 +164,23 @@ def scan_callback(data):
 
     # If the scan was a long time ago
     if time - laser['header']['stamp'] > 0.2:
+        total_missed += 1
         return
 
     #rospy.loginfo(f"Time difference: {time - laser['header']['stamp']} s")
+    rospy.loginfo(f"Miss %: {round(total_missed/total * 100)}")
 
     landmarks = extract_landmarks(laser)
+    rospy.loginfo(f"Num landmarks: {len(landmarks)}")
 
     
     if len(landmarks) != 0:
         pf.observe_landmarks(landmarks, H)
 
+    update_map(laser["ranges"], laser["angle_increment"], laser["angle_min"])
     pf.resample(pf.N)
 
-    update_map(laser["ranges"], laser["angle_increment"], laser["angle_min"])
+    #update_map(laser["ranges"], laser["angle_increment"], laser["angle_min"])
     publish_map()
 
 def update_map(ranges, angle_increment, min_angle):
@@ -254,6 +251,11 @@ def publish_map():
     publishers["pose_array"].publish(map["pose_array"])
 
 def main():
+    global total
+    global total_missed
+    total = 0
+    total_missed = 0
+
     global odom_covariance
     odom_covariance = np.array([0.005, 0.005, 0.001])
     #odom_covariance = np.array([0.000, 0.000, 0.0000])
@@ -265,10 +267,10 @@ def main():
     last_pose_estimate = np.array([0, 0, 0])
 
     global N_particles
-    N_particles = 100
+    N_particles = 200
 
     global pf 
-    pf = ParticleFilter(N_particles, Qt)
+    pf = ParticleFilter(N_particles, Qt, nprocesses=2)
 
     global bag_initial_time 
     bag_initial_time = None

@@ -36,15 +36,10 @@ class Particle:
         """Set the particle's weight to `weight`."""
         self.weight = weight
 
-    def update_pose(self, odom, variance):
-        """Update pose (AKA move the particle) according to odometry data `odom` and variance `variance`."""
-        c, s = np.cos(self.pose[2]), np.sin(self.pose[2])
-        tmat = np.array([
-            [c, s, 0],
-            [s, c, 0],
-            [0, 0, 1]
-        ])
-        self.pose += np.random.normal(tmat.dot(odom), np.sqrt(variance)).reshape(self.pose.shape)
+    def update_pose(self, r, theta, variance):
+        """Update pose (AKA move the particle) according to odometry data `(r, theta)` and variance `variance`."""
+        odom = np.array([r * np.cos(self.pose[2]), r * np.sin(self.pose[2]), theta])
+        self.pose += np.random.normal(odom, np.sqrt(variance)).reshape(self.pose.shape)
 
     def weigh(self, z_measured, match, H):
         """Weigh the particle's importance after observing a new landmark.
@@ -83,8 +78,10 @@ class ParticleFilter:
 
     def sample_pose(self, odom, variance):
         """Update the pose of every particle according to odometry data `odom` and variance `variance`."""
+        r = np.linalg.norm(odom[:2])
+        theta = odom[2]
         for particle in self.particles:
-            particle.update_pose(odom, variance)
+            particle.update_pose(r, theta, variance)
 
     def observe_landmarks(self, landmarks, H_func):
         """Inform every particle of landmark observations and update their weights accordingly."""

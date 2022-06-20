@@ -79,13 +79,7 @@ def main(t="ls", save=True, display=False):
         active_scan = None
         new_scan = False
         for i in tqdm.tqdm(range(8000, len(odoms))):
-            c, s = np.cos(positions[i-1][2]), np.sin(positions[i-1][2])
-            tmat = np.array([
-                [c, s, 0],
-                [s, c, 0],
-                [0, 0, 1]
-            ])
-            pose_estimate = tmat.dot(positions[i] - positions[i-1])
+            pose_estimate = positions[i] - positions[i-1]
             
             new_scan = False
             while active_scan is None or (active_scan < len(scans) - 2 and scans[active_scan+1]["header"]["stamp"] < t[i]):
