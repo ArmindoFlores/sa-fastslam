@@ -75,9 +75,17 @@ class ParticleFilter:
 
     def observe_landmarks(self, landmarks, H_func):
         """Inform every particle of landmark observations and update their weights accordingly."""
+        total = 0
+        max_match = 0
         for particle in self.particles:
+            total_matches = 0
             for landmark in landmarks:
-                particle.observe_landmark(landmark, H_func)
+                if particle.observe_landmark(landmark, H_func):
+                    total_matches += 1
+            if total_matches > max_match:
+                max_match = total_matches
+            total += total_matches
+        return total, max_match
 
     def resample(self, N=None, frac=0.8):
         """Compute the next generation of `N` particles based on the importance (weight) of the previous one.
