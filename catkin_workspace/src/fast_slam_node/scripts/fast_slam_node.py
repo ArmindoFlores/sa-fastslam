@@ -1,15 +1,23 @@
 #!/usr/bin/env python
-from functools import total_ordering
-import rospy
-from nav_msgs.msg import Odometry, OccupancyGrid, MapMetaData
-from geometry_msgs.msg import PoseStamped, PoseArray, Pose
-from sensor_msgs.msg import LaserScan
+import math
+import os
 import sys
-sys.path.insert(1, 'auxiliar_scripts')
-from particle_filter import *
-from landmark_extractor import  *
-from landmark_matching import  *
+import threading
+
 import numpy as np
+import rospy
+from geometry_msgs.msg import Pose, PoseArray, PoseStamped
+from nav_msgs.msg import MapMetaData, OccupancyGrid, Odometry
+from sensor_msgs.msg import LaserScan
+
+sys.path.insert(1, 'auxiliar_scripts')
+from landmark_extractor import *
+from landmark_matching import *
+from particle_filter import *
+
+
+particle_lock = threading.Lock()
+
 
 def to_cartesian(theta, r):
     if r > 0.001:
@@ -81,11 +89,17 @@ def H(xr, yr, tr):
     return np.array([[1, xr * np.sin(tr) - yr * np.cos(tr)], [0, 1]])
 
 def odom_callback(data):
-    global last_pose_estimate, N_particles
+    global last_pose_estimate, N_particles, bag_initial_time
+
+    if bag_initial_time is None:
+        bag_initial_time = rospy.Time.now().to_sec() - data.header.stamp.to_sec()
+
+    time = rospy.Time.now().to_sec() - bag_initial_time
+
     odom = {
         "header": {
             "seq": data.header.seq,
-            "stamp": data.header.stamp.secs + data.header.stamp.nsecs * 1e-9,
+            "stamp": data.header.stamp.to_sec(),
             "frame_id": data.header.frame_id
         },
         "child_frame_id": data.child_frame_id,
@@ -121,7 +135,11 @@ def odom_callback(data):
             "covariance": data.pose.covariance
         }
     }
-    
+
+    # If the scan was a long time ago
+    if time - odom['header']['stamp'] > 0.2:
+        return
+
     pos = odom["pose"]["pose"]["position"]
     rot = odom["pose"]["pose"]["orientation"]
 
@@ -132,8 +150,9 @@ def odom_callback(data):
     last_pose_estimate = pose
 
     # Update particles position if particle moved (needs to be changed to a more realistic threshold)
-    if pos["x"] > 0.1 or pos["y"] > 0.1 or rot["z"] > 0.05:
-        pf.sample_pose(pose_estimate, odom_covariance)
+    if abs(pose_estimate[0]) > 0.0001 or abs(pose_estimate[1]) > 0.0001 or abs(pose_estimate[2]) > 0.00005:
+        with particle_lock:
+            pf.sample_pose(pose_estimate, odom_covariance)
 
 def scan_callback(data):
     global bag_initial_time, total_missed, total
@@ -141,7 +160,6 @@ def scan_callback(data):
     total += 1
     if bag_initial_time is None:
         bag_initial_time = rospy.Time.now().to_sec() - data.header.stamp.to_sec()
-    
     
     time = rospy.Time.now().to_sec() - bag_initial_time
     
@@ -171,14 +189,14 @@ def scan_callback(data):
     rospy.loginfo(f"Miss %: {round(total_missed/total * 100)}")
 
     landmarks = extract_landmarks(laser)
-    rospy.loginfo(f"Num landmarks: {len(landmarks)}")
-
     
     if len(landmarks) != 0:
-        pf.observe_landmarks(landmarks, H)
+        total_matches, max_matches = pf.observe_landmarks(landmarks, H)
+        rospy.loginfo(f"Seen: {len(landmarks)} Max Matches: {max_matches} Total Matches: {total_matches} ({round(total_matches / pf.N, 2)} per particle)")
 
     update_map(laser["ranges"], laser["angle_increment"], laser["angle_min"])
-    pf.resample(pf.N)
+    with particle_lock:
+        pf.resample(pf.N)
 
     #update_map(laser["ranges"], laser["angle_increment"], laser["angle_min"])
     publish_map()
@@ -257,8 +275,8 @@ def main():
     total_missed = 0
 
     global odom_covariance
-    odom_covariance = np.array([0.005, 0.005, 0.001])
-    #odom_covariance = np.array([0.000, 0.000, 0.0000])
+    # odom_covariance = np.array([0.005, 0.005, 0.001])
+    odom_covariance = np.array([0.00005, 0.00005, 0.00005])
 
     global Qt
     Qt = np.array([[0.01, 0], [0, 0.0003]])
@@ -267,10 +285,10 @@ def main():
     last_pose_estimate = np.array([0, 0, 0])
 
     global N_particles
-    N_particles = 200
+    N_particles = 150
 
     global pf 
-    pf = ParticleFilter(N_particles, Qt, nprocesses=2)
+    pf = ParticleFilter(N_particles, Qt)
 
     global bag_initial_time 
     bag_initial_time = None
@@ -313,7 +331,7 @@ def main():
     map["grid"].data = (0 *np.ones(map["map_metadata"].height*map["map_metadata"].width, np.int_)).tolist()
 
 
-    print("Fast Slam Node initialized, now listening for scans and odometry to update the current estimated map and pose")
+    rospy.loginfo("Fast Slam Node initialized, now listening for scans and odometry to update the current estimated map and pose")
     rospy.spin()
 
 if __name__ == '__main__':
