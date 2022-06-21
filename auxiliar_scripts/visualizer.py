@@ -36,7 +36,7 @@ def transform_landmark(landmark, position, rotmat):
         c = start[0] - b * start[1]
     return landmark_extractor.Landmark(a, b, c, start, end, landmark._r2)
 
-def main(t="ls", save=True, display=False):
+def main(t="ls", save=True, display=True):
     global positions
     scan_files = loader.from_dir(SCANS_DIR, "ls")
     try:
@@ -78,7 +78,7 @@ def main(t="ls", save=True, display=False):
         prev_landmarks = []
         active_scan = None
         new_scan = False
-        for i in tqdm.tqdm(range(8000, len(odoms))):
+        for i in tqdm.tqdm(range(200, len(odoms))):
             pose_estimate = positions[i] - positions[i-1]
             
             new_scan = False
@@ -91,7 +91,7 @@ def main(t="ls", save=True, display=False):
             
             # Update particle filter with new odometry data
             if np.sum(np.abs(pose_estimate)) > 0.0001:
-                pf.sample_pose(pose_estimate, np.array([0.001, 0.001, 0.001]))
+                pf.sample_pose(pose_estimate, np.array([0.0001, 0.0001, 0.0001]))
             
             img = np.ones((IMG_SIZE, IMG_SIZE), dtype=np.uint8) * 255
             ax1_scale_factor = IMG_SIZE // 30
@@ -105,7 +105,8 @@ def main(t="ls", save=True, display=False):
                 if new_scan:
                     landmarks = landmark_extractor.extract_landmarks(
                         scan_info,
-                        N=500
+                        C=22,
+                        N=300
                     )
                     if len(landmarks) != 0:
                         pf.observe_landmarks(landmarks, H)
@@ -223,4 +224,4 @@ def main(t="ls", save=True, display=False):
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:])
+    main()
