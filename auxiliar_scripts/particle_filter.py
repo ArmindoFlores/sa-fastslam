@@ -93,7 +93,7 @@ class ParticleFilter:
             total += total_matches
         return total, max_match
 
-    def resample(self, N=None, frac=0.8):
+    def resample(self, N=None, frac=1):
         """Compute the next generation of `N` particles based on the importance (weight) of the previous one.
         `frac` - the fraction of particles that are chosen based on weight. The rest are sampled randomly.
         """
@@ -108,6 +108,9 @@ class ParticleFilter:
                 particle.set_weight(1)
             return
         normalized_weights = [particle.weight / total_weight for particle in self.particles]
+        if np.std(normalized_weights) < 0.01:
+            return
+        print("Resampling")
         self.particles = list(np.random.choice(self.particles, n1, True, normalized_weights)) \
                        + list(np.random.choice(self.particles, n2, True)) 
         self.particles = [particle.copy() for particle in self.particles]

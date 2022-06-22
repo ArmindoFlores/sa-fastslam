@@ -21,7 +21,7 @@ def quaternion_to_euler(x, y, z, w):
 def H(xr, yr, tr):
     return np.array([[1, xr * np.sin(tr) - yr * np.cos(tr)], [0, 1]])
 
-def main(save=False, display=True):
+def main(save=True, display=True):
     global positions
     scan_files = loader.from_dir(SCANS_DIR, "ls")
     try:
@@ -63,6 +63,7 @@ def main(save=False, display=True):
     prev_landmarks = []
     active_scan = None
     new_scan = False
+    best_particle = None
     for i in tqdm.tqdm(range(200, len(odoms))):
         pose_estimate = positions[i] - positions[i-1]
         
@@ -76,12 +77,12 @@ def main(save=False, display=True):
         
         # Update particle filter with new odometry data
         if np.sum(np.abs(pose_estimate)) > 0.0001:
-            pf.sample_pose(pose_estimate, np.array([0.001, 0.001, 0.01]))
+            pf.sample_pose(pose_estimate, np.array([0.001, 0.001, 0.001]))
         
         img = np.ones((IMG_SIZE, IMG_SIZE), dtype=np.uint8) * 255
         ax1_scale_factor = IMG_SIZE // 30
         ax2_scale_factor = IMG_SIZE // 10
-        ax1_offset = np.array([40, IMG_SIZE - 40])
+        ax1_offset = np.array([IMG_SIZE // 2, IMG_SIZE // 2])
         ax2_offset = np.array([IMG_SIZE // 2, IMG_SIZE // 2])
         
         if active_scan is not None:
@@ -126,12 +127,14 @@ def main(save=False, display=True):
             end = (IMG_SIZE, m * IMG_SIZE + b)
             ax2.plot([start[0], end[0]], [start[1], end[1]], "g")
         
-        best = pf.particles[0]
+        if new_scan or best_particle is None:
+            best_particle = pf.particles[0]
         max_n_landmarks = 0
         max_n_valid_landmarks = 0
         for particle in pf.particles:
-            if best.weight < particle.weight:
-                best = particle
+            if new_scan:
+                if best_particle.weight < particle.weight:
+                    best_particle = particle
                 
             l1 = len(particle.landmark_matcher.landmarks)
             l2 = len(particle.landmark_matcher.valid_landmarks)
@@ -142,26 +145,30 @@ def main(save=False, display=True):
             position = particle.pose[:2] * ax1_scale_factor + ax1_offset
             ax1.plot(position[0], position[1], "go", markersize=3, alpha=0.1)
 
-        # if new_scan:
+        if new_scan:
+            pass
+            # print([ekf.landmark for ekf in best.landmark_matcher.valid_landmarks])
+            # print(landmarks)
             # print(f"\nMax landmarks: {max_n_landmarks}\nMax valid landmarks: {max_n_valid_landmarks}")
 
         # Display cloud center of mass
-        position = np.array([0, 0, 0], dtype=np.float64)
-        for particle in pf.particles:
-            position += particle.pose
-        position /= len(pf.particles)
+        # position = np.array([0, 0, 0], dtype=np.float64)
+        # for particle in pf.particles:
+        #     position += particle.pose
+        # position /= len(pf.particles)
         
         odom_position = positions[i].copy()
         odom_position[:2] = odom_position[:2] * ax1_scale_factor + ax1_offset
         
-        position[:2] = position[:2] * ax1_scale_factor + ax1_offset
+        position = best_particle.pose.copy()
+        position[:2] = best_particle.pose[:2] * ax1_scale_factor + ax1_offset
         ax1.plot(position[0], position[1], "ro", markersize=3)
         ax1.plot([position[0], position[0]+20*np.cos(position[2])], [position[1], position[1]+20*np.sin(position[2])], "r")
         
         ax1.plot(odom_position[0], odom_position[1], "bo", markersize=3)
         ax1.plot([odom_position[0], odom_position[0]+20*np.cos(odom_position[2])], [odom_position[1], odom_position[1]+20*np.sin(odom_position[2])], "b")
             
-        for ekf in best.landmark_matcher.valid_landmarks:
+        for ekf in best_particle.landmark_matcher.valid_landmarks:
             landmark = ekf.landmark
             m = -landmark.equation[0] / landmark.equation[1]
             b = -landmark.equation[2] / landmark.equation[1] * ax1_scale_factor
