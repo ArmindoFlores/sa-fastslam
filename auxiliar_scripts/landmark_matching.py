@@ -3,8 +3,6 @@ import time
 
 import landmark_extractor
 
-LANDMARK_VAR = 0.05
-
 
 class KalmanFilter:
     def __init__(self, landmark, initial_covariance, Qt):
@@ -15,7 +13,7 @@ class KalmanFilter:
     def update(self, z_measured, z_predicted, H):
         Q = H.dot(self.covariance).dot(H.T) + self.Qt # * (2 - landmark.r2)
         K = self.covariance.dot(H.T).dot(np.linalg.inv(Q))
-        if np.isclose(abs(z_measured[1] - z_predicted[1]), 2 * np.pi, 0.5):
+        if abs(abs(z_measured[1] - z_predicted[1]) - 2 * np.pi) < 0.5:
             if z_measured[1] > z_predicted[1]:
                 z_measured[1] -= 2 * np.pi
             else:
@@ -24,7 +22,7 @@ class KalmanFilter:
         self.covariance -= K.dot(H).dot(self.covariance)
 
 class LandmarkMatcher:
-    def __init__(self, Qt, minimum_observations=6, distance_threshold=0.25, max_invalid_landmarks=None):
+    def __init__(self, Qt, minimum_observations=6, distance_threshold=0.3, max_invalid_landmarks=None):
         self._landmarks = []
         self.minimum_observations = minimum_observations
         self.distance_threshold = distance_threshold
@@ -42,27 +40,28 @@ class LandmarkMatcher:
     def observe(self, landmark, H, pose):
         closest = None
         match = None
+        dsquared = self.distance_threshold**2
         
-        worldspace_landmark = landmark_extractor.Landmark(*landmark.equation, landmark.start, landmark.end, landmark._r2)
+        worldspace_landmark = landmark_extractor.Landmark(*landmark.params(), landmark.r2)
         d, phi = landmark.params()
         theta = phi + pose[2]
         new_params = np.array([d + pose[0] * np.cos(theta) + pose[1] * np.sin(theta), theta])
         worldspace_landmark.update_params(new_params - np.array([d, phi]))
         p1 = worldspace_landmark.closest_point(*pose[:2])
+        new_params = worldspace_landmark.params()
         
         for i, (_, ekf) in enumerate(self._landmarks):
             glandmark = ekf.landmark
             # Compute the distance between projections on both landmarks
-            ld = np.linalg.norm(p1 - glandmark.closest_point(*pose[:2]))
-            if ld < self.distance_threshold and (closest is None or ld < closest["difference"]):
+            ld = np.sum(np.square(p1 - glandmark.closest_point(*pose[:2])))
+            if ld < dsquared and (closest is None or ld < closest["difference"]):
                 closest = {"difference": ld, "filter": ekf}
         if closest is not None:
             # Found a match
-            closest["filter"].update(worldspace_landmark.params(), closest["filter"].landmark.params(), H)
+            closest["filter"].update(new_params, closest["filter"].landmark.params(), H)
             closest["filter"].landmark.count += 1
             self._landmarks[i][0] = time.time()
             
-            # closest["landmark"].update(landmark)
             if closest["filter"].landmark.count >= self.minimum_observations:
                 match = closest["filter"]
         else:

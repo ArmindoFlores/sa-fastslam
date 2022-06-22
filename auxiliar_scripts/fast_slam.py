@@ -17,20 +17,6 @@ LASER_SIGMA = .2
 def H(xr, yr, tr):
     return np.array([[1, xr * np.sin(tr) - yr * np.cos(tr)], [0, 1]])
 
-def transform_landmark(landmark, position, rotmat):
-    start = position[:2] + np.dot(rotmat, -landmark.start)
-    end =  position[:2] + np.dot(rotmat, -landmark.end)
-    v = end - start    
-    if v[0] != 0:
-        a = v[1] / v[0]
-        b = -1
-        c = start[1] - a * start[0]
-    else:
-        a = -1
-        b = v[0] / v[1]
-        c = start[0] - b * start[1]
-    return landmark_extractor.Landmark(a, b, c, start, end, landmark._r2)
-
 def get_timestamp(filename, prefix):
     return float(".".join(os.path.basename(filename).split(".")[:-1])[len(prefix):])
 
@@ -158,7 +144,7 @@ def update(n, state):
             "angle_min":0 
         }, 20, C=50, X=3)
         state["matches"] = []
-        state["particle_filter"].observe_landmarks(landmarks, H)
+        state["particle_filter"].observe_landmarks(landmarks)
         best_particle = None
         for particle in state["particle_filter"].particles:
             if best_particle is None or particle.weight > best_particle.weight:
@@ -168,12 +154,6 @@ def update(n, state):
         # print("Mapped landmarks:", len(best_particle.landmark_matcher.valid_landmarks))
         
         state["particle_filter"].resample(frac=0.8)
-            
-        # for landmark in map(lambda l: transform_landmark(l, 250-state["pos"], np.identity(2)), landmarks):
-        #     match = state["matcher"].observe(landmark)
-        #     if match is not None:
-        #         state["matches"].append(match)
-        # print(f"Matches: {len(state['matches'])}/{len(state['matcher'].valid_landmarks)}")
         
     return update_display(state)
 
@@ -211,7 +191,7 @@ def main():
         "last_ls": image,
         "update_ls": False,
         "ax": ax1,
-        "particle_filter": particle_filter.ParticleFilter(150, np.array([[0.01, 0], [0, 0.0003]]), (*(np.array(image.shape) / 2), 0)),
+        "particle_filter": particle_filter.ParticleFilter(150, np.array([[0.01, 0], [0, 0.0003]]), H, (*(np.array(image.shape) / 2), 0)),
         "particles": [],
         "matches": [],
         "landmarks": [],

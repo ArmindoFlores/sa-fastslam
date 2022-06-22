@@ -7,7 +7,7 @@ class Particle:
     """A class describing a particle member of a particle filter.
     Contains its pose and weight.
     """
-    def __init__(self, Qt, pose=None):
+    def __init__(self, Qt, H_func, pose=None):
         """Instatiate a new `Particle` object, with `pose` as the starting pose."""
         if pose is None:
             self.pose = np.array([0, 0, 0], dtype=np.float64)
@@ -15,18 +15,20 @@ class Particle:
             self.pose = np.array(pose, dtype=np.float64)
         self.weight = 1
         self.Qt = Qt
+        self.H_func = H_func
+        self.H = None
         self.landmark_matcher = landmark_matching.LandmarkMatcher(Qt=Qt, distance_threshold=0.3, max_invalid_landmarks=8)
         
     def __repr__(self):
         return f"<Particle pose={tuple(np.round(self.pose, 3))} weight={round(self.weight, 3)}>"
 
-    def observe_landmark(self, landmark, H_func):
+    def observe_landmark(self, landmark):
         """Try to match an observed landmark to list of previously seen ones and update its location 
         estimate and the particle's weight.
         """
-        match = self.landmark_matcher.observe(landmark, H_func(*self.pose), self.pose)
+        match = self.landmark_matcher.observe(landmark, self.H, self.pose)
         if match is not None:
-            self.weigh(landmark.params(), match, H_func(*self.pose))
+            self.weigh(landmark.params(), match)
             return True
         return False
     
@@ -40,8 +42,11 @@ class Particle:
         theta_estimate = np.random.normal(theta, np.sqrt(variance[2]))
         odom = np.array([r_estimate * np.cos(self.pose[2]), r_estimate * np.sin(self.pose[2]), theta_estimate])
         self.pose += odom
+        
+    def eval_H(self):
+        self.H = self.H_func(*self.pose)
 
-    def weigh(self, z_measured, match, H):
+    def weigh(self, z_measured, match):
         """Weigh the particle's importance after observing a new landmark.
         `z_measured` - the observed position of the landmark
         `match` - matched landmark
@@ -49,22 +54,22 @@ class Particle:
         """
         landmark = match.landmark
         z_predicted = landmark.params(self.pose)
-        Q = H.dot(match.covariance).dot(H.T) + self.Qt
+        Q = self.H.dot(match.covariance).dot(self.H.T) + self.Qt
         Z = z_measured - z_predicted
         self.weight *= np.exp(-0.5 * Z.T.dot(np.linalg.inv(Q)).dot(Z)) / np.sqrt(np.linalg.det(2 * np.pi * Q))
         
     def copy(self):
-        new_particle = Particle(self.Qt.copy(), self.pose.copy())
+        new_particle = Particle(self.Qt.copy(), self.H_func, self.pose.copy())
         new_particle.landmark_matcher = self.landmark_matcher.copy()
         return new_particle
 
 
 class ParticleFilter:
     """A class describing a particle filter."""
-    def __init__(self, N, Qt, initial_pose=(0, 0, 0)):
+    def __init__(self, N, Qt, H_func, initial_pose=(0, 0, 0)):
         """Instatiate a new particle filter with `N` particles."""
         self.N = N
-        self.particles = [Particle(Qt, initial_pose) for _ in range(N)]
+        self.particles = [Particle(Qt, H_func, initial_pose) for _ in range(N)]
 
     def sample_pose(self, odom, variance):
         """Update the pose of every particle according to odometry data `odom` and variance `variance`."""
@@ -73,14 +78,15 @@ class ParticleFilter:
         for particle in self.particles:
             particle.update_pose(r, theta, variance)
 
-    def observe_landmarks(self, landmarks, H_func):
+    def observe_landmarks(self, landmarks):
         """Inform every particle of landmark observations and update their weights accordingly."""
         total = 0
         max_match = 0
         for particle in self.particles:
+            particle.eval_H()
             total_matches = 0
             for landmark in landmarks:
-                if particle.observe_landmark(landmark, H_func):
+                if particle.observe_landmark(landmark):
                     total_matches += 1
             if total_matches > max_match:
                 max_match = total_matches
