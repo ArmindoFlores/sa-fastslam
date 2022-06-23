@@ -7,7 +7,7 @@ class Particle:
     """A class describing a particle member of a particle filter.
     Contains its pose and weight.
     """
-    def __init__(self, Qt, H_func, pose=None):
+    def __init__(self, Qt, H_func, pose=None, **landmark_matcher_kwargs):
         """Instatiate a new `Particle` object, with `pose` as the starting pose."""
         if pose is None:
             self.pose = np.array([0, 0, 0], dtype=np.float64)
@@ -17,7 +17,7 @@ class Particle:
         self.Qt = Qt
         self.H_func = H_func
         self.H = None
-        self.landmark_matcher = landmark_matching.LandmarkMatcher(Qt=Qt, distance_threshold=0.3, max_invalid_landmarks=8)
+        self.landmark_matcher = landmark_matching.LandmarkMatcher(Qt=Qt, **landmark_matcher_kwargs)
         
     def __repr__(self):
         return f"<Particle pose={tuple(np.round(self.pose, 3))} weight={round(self.weight, 3)}>"
@@ -66,10 +66,10 @@ class Particle:
 
 class ParticleFilter:
     """A class describing a particle filter."""
-    def __init__(self, N, Qt, H_func, initial_pose=(0, 0, 0)):
+    def __init__(self, N, Qt, H_func, initial_pose=(0, 0, 0), **landmark_matcher_kwargs):
         """Instatiate a new particle filter with `N` particles."""
         self.N = N
-        self.particles = [Particle(Qt, H_func, initial_pose) for _ in range(N)]
+        self.particles = [Particle(Qt, H_func, initial_pose, **landmark_matcher_kwargs) for _ in range(N)]
 
     def sample_pose(self, odom, variance):
         """Update the pose of every particle according to odometry data `odom` and variance `variance`."""
@@ -110,7 +110,6 @@ class ParticleFilter:
         normalized_weights = [particle.weight / total_weight for particle in self.particles]
         if np.std(normalized_weights) < 0.01:
             return
-        print("Resampling")
         self.particles = list(np.random.choice(self.particles, n1, True, normalized_weights)) \
                        + list(np.random.choice(self.particles, n2, True)) 
         self.particles = [particle.copy() for particle in self.particles]

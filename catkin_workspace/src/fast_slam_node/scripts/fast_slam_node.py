@@ -188,10 +188,10 @@ def scan_callback(data):
     #rospy.loginfo(f"Time difference: {time - laser['header']['stamp']} s")
     rospy.loginfo(f"Miss %: {round(total_missed/total * 100)}")
 
-    landmarks = extract_landmarks(laser)
+    landmarks = extract_landmarks(laser, C=24, X=0.01, N=150)
     
     if len(landmarks) != 0:
-        total_matches, max_matches = pf.observe_landmarks(landmarks, H)
+        total_matches, max_matches = pf.observe_landmarks(landmarks)
         rospy.loginfo(f"Seen: {len(landmarks)} Max Matches: {max_matches} Total Matches: {total_matches} ({round(total_matches / pf.N, 2)} per particle)")
 
     update_map(laser["ranges"], laser["angle_increment"], laser["angle_min"])
@@ -288,7 +288,7 @@ def main():
     N_particles = 150
 
     global pf 
-    pf = ParticleFilter(N_particles, Qt)
+    pf = ParticleFilter(N_particles, Qt, minimum_observations=6, distance_threshold=0.3, max_invalid_landmarks=12)
 
     global bag_initial_time 
     bag_initial_time = None

@@ -58,7 +58,15 @@ def main(save=True, display=True):
             scan_info = pickle.load(f)
             scans.append(scan_info)
             
-    pf = particle_filter.ParticleFilter(200, np.array([[0.1, 0], [0, 0.03]]), H, (0, 0, 0))
+    pf = particle_filter.ParticleFilter(
+        200, 
+        np.array([[0.1, 0], [0, 0.1]]), 
+        H, 
+        (0, 0, 0),
+        minimum_observations=6,
+        distance_threshold=0.3, 
+        max_invalid_landmarks=None
+    )
     
     prev_landmarks = []
     active_scan = None
@@ -76,7 +84,7 @@ def main(save=True, display=True):
             new_scan = True
         
         # Update particle filter with new odometry data
-        if np.sum(np.abs(pose_estimate)) > 0.0001:
+        if np.sum(np.abs(pose_estimate)) > 0.00001:
             pf.sample_pose(pose_estimate, np.array([0.001, 0.001, 0.001]))
         
         img = np.ones((IMG_SIZE, IMG_SIZE), dtype=np.uint8) * 255
@@ -91,9 +99,9 @@ def main(save=True, display=True):
             if new_scan:
                 landmarks = landmark_extractor.extract_landmarks(
                     scan_info,
-                    C=25,
+                    C=24,
                     X=0.01,
-                    N=300
+                    N=150
                 )
                 if len(landmarks) != 0:
                     pf.observe_landmarks(landmarks)

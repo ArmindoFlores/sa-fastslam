@@ -78,6 +78,18 @@ def update_display(state):
         state["ls_img"].set_clim(state["last_ls"].min(), state["last_ls"].max())
         result.append(state["ls_img"])
         
+    for i, landmark in enumerate(state["observed"]):
+        m = -landmark.equation[0] / landmark.equation[1]
+        b = -landmark.equation[2] / landmark.equation[1] * 10
+        b = -m * 80 + b + 80
+        start = (0, b)
+        end = (250, m * 250 + b)
+        if len(state["landmarks2"]) > i:
+            state["landmarks2"][i].set_data([start[1], end[1]], [start[0], end[0]])
+        else:
+            state["landmarks2"].append(state["ax2"].plot([start[1], end[1]], [start[0], end[0]], color="green")[0])
+    result += state["landmarks2"]
+            
     for i, landmark in enumerate(state["matches"]):
         if landmark.equation[1] != 0:
             start = 0, -landmark.equation[2] / landmark.equation[1]
@@ -96,8 +108,8 @@ def update_display(state):
         if best_particle is None or particle.weight > best_particle.weight:
             best_particle = particle
         # print("Particle", i, particle.pose)
-        state["particles"][i].set_data([particle.pose[1], particle.pose[0]])
-    state["best_particle"][0].set_data([best_particle.pose[1], best_particle.pose[0]])
+        state["particles"][i].set_data([250 - particle.pose[1], 250 - particle.pose[0]])
+    state["best_particle"][0].set_data([250 - best_particle.pose[1], 250 - best_particle.pose[0]])
     result += state["particles"] + state["best_particle"]
         
     return result
@@ -133,7 +145,7 @@ def update(n, state):
         laser_data = generate_laser_data(state)
         
     # Update our particle filter  
-    state["particle_filter"].sample_pose(odom_data, (ODOM_SIGMA*2)**2 * np.ones(3))
+    state["particle_filter"].sample_pose(odom_data, (ODOM_SIGMA)**2 * np.ones(3))
     # state["particle_filter"].sample_pose((*real_movement, 0), np.zeros(3))
     if laser_data is not None:
         state["update_ls"] = True
@@ -141,14 +153,16 @@ def update(n, state):
         landmarks = landmark_extractor.extract_landmarks({
             "ranges": laser_data,
             "angle_increment": 2 * np.pi / 360,
-            "angle_min":0 
-        }, 20, C=50, X=3)
+            "angle_min": 0 
+        }, 1, C=25, X=3)
+        state["observed"] = landmarks
         state["matches"] = []
         state["particle_filter"].observe_landmarks(landmarks)
         best_particle = None
         for particle in state["particle_filter"].particles:
             if best_particle is None or particle.weight > best_particle.weight:
                 best_particle = particle
+        print([ekf.landmark for ekf in best_particle.landmark_matcher.landmarks])
         state["matches"] = best_particle.landmark_matcher.valid_landmarks
         # print("\n".join(map(lambda l: str(l.landmark), best_particle.landmark_matcher.valid_landmarks)))
         # print("Mapped landmarks:", len(best_particle.landmark_matcher.valid_landmarks))
@@ -191,11 +205,14 @@ def main():
         "last_ls": image,
         "update_ls": False,
         "ax": ax1,
-        "particle_filter": particle_filter.ParticleFilter(150, np.array([[0.01, 0], [0, 0.0003]]), H, (*(np.array(image.shape) / 2), 0)),
+        "ax2": ax2,
+        "particle_filter": particle_filter.ParticleFilter(150, np.array([[0.1, 0], [0, 0.03]]), H, (*(np.array(image.shape) / 2), 0), minimum_observations=6, distance_threshold=10, max_invalid_landmarks=12),
         "particles": [],
         "matches": [],
         "landmarks": [],
-        "best_particle": []
+        "best_particle": [],
+        "observed": [],
+        "landmarks2": []
     }
     
     best_particle = None
