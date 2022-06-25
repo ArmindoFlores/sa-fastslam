@@ -188,15 +188,21 @@ def scan_callback(data):
     #rospy.loginfo(f"Time difference: {time - laser['header']['stamp']} s")
     rospy.loginfo(f"Miss %: {round(total_missed/total * 100)}")
 
-    landmarks = extract_landmarks(laser, C=18, X=0.01, N=150)
+    landmarks = extract_landmarks(laser, C=23, X=0.01, N=150)
     
     if len(landmarks) != 0:
         total_matches, max_matches = pf.observe_landmarks(landmarks)
         rospy.loginfo(f"Seen: {len(landmarks)} Max Matches: {max_matches} Total Matches: {total_matches} ({round(total_matches / pf.N, 2)} per particle)")
 
+    best_particle = pf.particles[0]
+    for particle in pf.particles:
+        if particle.weight > best_particle.weight:
+            best_particle = particle
+    rospy.loginfo(f"Total valid: {len(best_particle.landmark_matcher.landmarks)}")
+
     update_map(laser["ranges"], laser["angle_increment"], laser["angle_min"])
     with particle_lock:
-        pf.resample(pf.N, 0.5)
+        pf.resample(pf.N, 0.7)
 
     #update_map(laser["ranges"], laser["angle_increment"], laser["angle_min"])
     publish_map()
@@ -279,16 +285,16 @@ def main():
     # odom_covariance = np.array([0.0, 0.0, 0.0])
 
     global Qt
-    Qt = np.array([[0.1, 0], [0, 0.03]])
+    Qt = np.array([[0.001, 0], [0, 0.0003]])
 
     global last_pose_estimate
     last_pose_estimate = np.array([0, 0, 0])
 
     global N_particles
-    N_particles = 1
+    N_particles = 100
 
     global pf 
-    pf = ParticleFilter(N_particles, Qt, H, minimum_observations=4, distance_threshold=0.15, max_invalid_landmarks=12)
+    pf = ParticleFilter(N_particles, Qt, H, minimum_observations=6, distance_threshold=0.5, max_invalid_landmarks=12)
 
     global bag_initial_time 
     bag_initial_time = None

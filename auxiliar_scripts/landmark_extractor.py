@@ -16,6 +16,10 @@ class Landmark:
     
     def __init__(self, r, theta, r2=0):
         """Instantiate a new Landmark object, representing a line described by `(r, theta)`"""
+        if r < 0:
+            r *= -1
+            theta += np.pi
+        theta %= 2 * np.pi
         self._params = np.array([r, theta])
         self.count = 1
         self.r2 = r2
@@ -30,6 +34,9 @@ class Landmark:
         
     def update_params(self, params):
         self._params += params
+        if self._params[0] < 0:
+            self._params[0] *= -1
+            self._params[1] += np.pi
         self._params[1] %= (2 * np.pi)
         
     def closest_point(self, x, y):
@@ -57,10 +64,15 @@ class Landmark:
         """Line defined an angle and a distance to point `pose`. Defaults to the world origin."""
         if pose is None:
             return self._params
-        return np.array([
+        computed_params = np.array([
             self._params[0] - pose[0] * np.cos(self._params[1]) - pose[1] * np.sin(self._params[1]), 
-            self._params[1] - pose[2] % (2 * np.pi)
+            self._params[1] - pose[2]
         ])
+        if computed_params[0] < 0:
+            computed_params[0] *= -1
+            computed_params[1] += np.pi
+        computed_params[1] %= 2 * np.pi
+        return computed_params
         
     @staticmethod
     def from_equation(a, b, c, r2):

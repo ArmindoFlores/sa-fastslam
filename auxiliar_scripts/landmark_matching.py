@@ -9,16 +9,16 @@ class KalmanFilter:
         self.landmark = landmark
         self.covariance = initial_covariance
         self.Qt = Qt
+
+    def __repr__(self):
+        return f"<EKF landmark={self.landmark} cov={np.linalg.norm(self.covariance)}>"
         
     def update(self, z_measured, z_predicted, H):
         Q = H.dot(self.covariance).dot(H.T) + self.Qt # * (2 - landmark.r2)
         K = self.covariance.dot(H.T).dot(np.linalg.inv(Q))
-        if abs(abs(z_measured[1] - z_predicted[1]) - 2 * np.pi) < 0.5:
-            if z_measured[1] > z_predicted[1]:
-                z_measured[1] -= 2 * np.pi
-            else:
-                z_predicted[1] -= 2 * np.pi
-        self.landmark.update_params(K.dot(z_measured - z_predicted))
+        diff = z_measured - z_predicted
+        diff[1] = (diff[1] + np.pi) % (np.pi * 2) - np.pi
+        self.landmark.update_params(K.dot(diff))
         self.covariance -= K.dot(H).dot(self.covariance)
 
 class LandmarkMatcher:
@@ -30,11 +30,11 @@ class LandmarkMatcher:
         self.Qt = Qt
         
     def copy(self):
-        new_landmark_matcher = LandmarkMatcher(self.Qt, self.minimum_observations, self.distance_threshold, self.max_invalid_landmarks)
+        new_landmark_matcher = LandmarkMatcher(self.Qt.copy(), self.minimum_observations, self.distance_threshold, self.max_invalid_landmarks)
         for t, ekf in self._landmarks:
             landmark = ekf.landmark
             copy_landmark = landmark.copy()
-            new_landmark_matcher._landmarks.append([t, KalmanFilter(copy_landmark, ekf.covariance, ekf.Qt)])
+            new_landmark_matcher._landmarks.append([t, KalmanFilter(copy_landmark, ekf.covariance.copy(), ekf.Qt.copy())])
         return new_landmark_matcher
         
     def observe(self, landmark, H, pose):
@@ -42,11 +42,10 @@ class LandmarkMatcher:
         match = None
         dsquared = self.distance_threshold**2
         
-        worldspace_landmark = landmark_extractor.Landmark(*landmark.params(), landmark.r2)
         d, phi = landmark.params()
         theta = phi + pose[2]
         new_params = np.array([d + pose[0] * np.cos(theta) + pose[1] * np.sin(theta), theta])
-        worldspace_landmark.update_params(new_params - np.array([d, phi]))
+        worldspace_landmark = landmark_extractor.Landmark(*new_params, landmark.r2)
         p1 = worldspace_landmark.closest_point(*pose[:2])
         new_params = worldspace_landmark.params()
         
@@ -54,6 +53,10 @@ class LandmarkMatcher:
             glandmark = ekf.landmark
             # Compute the distance between projections on both landmarks
             ld = np.sum(np.square(p1 - glandmark.closest_point(*pose[:2])))
+            # rdiff = new_params[0] - glandmark.params()[0]
+            # tdiff = new_params[1] - glandmark.params()[1]
+            # tdiff = (tdiff + np.pi) % (np.pi * 2) - np.pi  # Wrap angles
+            # ld = np.sum(np.square([rdiff, tdiff]))
             if ld < dsquared and (closest is None or ld < closest["difference"]):
                 closest = {"difference": ld, "filter": ekf}
         if closest is not None:
