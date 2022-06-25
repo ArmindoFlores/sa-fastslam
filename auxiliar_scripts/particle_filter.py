@@ -108,8 +108,8 @@ class ParticleFilter:
                 particle.set_weight(1)
             return
         normalized_weights = [particle.weight / total_weight for particle in self.particles]
-        if np.std(normalized_weights) < 0.01:
-            return
+        # if np.std(normalized_weights) < 0.01:
+        #     return
         self.particles = list(np.random.choice(self.particles, n1, True, normalized_weights)) \
                        + list(np.random.choice(self.particles, n2, True)) 
         self.particles = [particle.copy() for particle in self.particles]
