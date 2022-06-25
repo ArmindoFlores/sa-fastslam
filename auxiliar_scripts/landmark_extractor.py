@@ -192,6 +192,11 @@ def extract_features(ls, N=300, C=22, X=0.02, D=10, S=6):
             if distance < X:
                 close_enough[close_enough_size] = i
                 close_enough_size += 1
+            if distance < 5 * X:
+                try:
+                    available.remove(i)
+                except ValueError:
+                    pass
         
         # If the number of points close to the line is above a threshold C
         if close_enough_size > C:
@@ -234,12 +239,6 @@ def extract_features(ls, N=300, C=22, X=0.02, D=10, S=6):
                 c = o
                  
             features.append((a, b, c, r2))
-            
-            for point in close_enough[:close_enough_size]:
-                try:
-                    available.remove(point)
-                except ValueError:
-                    pass
     return features
 
 def extract_landmarks(ls, T=0.25, N=400, C=18, X=0.02, D=10, S=6):
