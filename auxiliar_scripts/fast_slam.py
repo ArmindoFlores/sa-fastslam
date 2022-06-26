@@ -74,11 +74,11 @@ def update_display(state):
     # state["my_pos_guess"].set_data(state["pos_guess"][1], state["pos_guess"][0])
     state["my_pos_rot"].set_data([state["pos"][1], state["pos"][1]+20*np.sin(state["pos"][2])], [state["pos"][0], state["pos"][0]+20*np.cos(state["pos"][2])])
     
-    if state["update_ls"]:
-        state["update_ls"] = False
-        state["ls_img"].set_data(state["last_ls"])
-        state["ls_img"].set_clim(state["last_ls"].min(), state["last_ls"].max())
-        result.append(state["ls_img"])
+    # if state["update_ls"]:
+    state["update_ls"] = False
+    state["ls_img"].set_data(state["last_ls"])
+    state["ls_img"].set_clim(state["last_ls"].min(), state["last_ls"].max())
+    result.append(state["ls_img"])
         
     for i, landmark in enumerate(state["observed"]):
         equation = landmark.equation
@@ -221,7 +221,7 @@ def main():
         "update_ls": False,
         "ax": ax1,
         "ax2": ax2,
-        "particle_filter": particle_filter.ParticleFilter(150, np.array([[0.1, 0], [0, 0.03]]), H, (*(np.array(image.shape) / 2), 0), minimum_observations=6, distance_threshold=10, max_invalid_landmarks=12),
+        "particle_filter": particle_filter.ParticleFilter(100, np.array([[0.1, 0], [0, 0.03]]), H, (*(np.array(image.shape) / 2), 0), minimum_observations=6, distance_threshold=10, max_invalid_landmarks=12),
         "particles": [],
         "matches": [],
         "landmarks": [],
