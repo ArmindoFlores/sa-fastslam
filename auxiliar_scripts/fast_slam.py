@@ -161,7 +161,7 @@ def update(n, state):
         laser_data = generate_laser_data(state)
         
     # Update our particle filter  
-    state["particle_filter"].sample_pose(odom_data, (ODOM_SIGMA * N)**2 * np.ones(3))
+    state["particle_filter"].sample_pose(odom_data, (ODOM_SIGMA * N * 2)**2 * np.ones(3))
     # state["particle_filter"].sample_pose((*real_movement, 0), np.zeros(3))
     if laser_data is not None:
         state["update_ls"] = True
@@ -223,7 +223,7 @@ def main():
         "update_ls": False,
         "ax": ax1,
         "ax2": ax2,
-        "particle_filter": particle_filter.ParticleFilter(100, np.array([[0.1, 0], [0, 0.03]]), H, (*(np.array(image.shape) / 2), 0), minimum_observations=6, distance_threshold=10, max_invalid_landmarks=12),
+        "particle_filter": None,
         "particles": [],
         "matches": [],
         "landmarks": [],
@@ -231,6 +231,9 @@ def main():
         "observed": [],
         "landmarks2": []
     }
+    state["pos"][1] -= 50
+    state["pos"][2] = 0
+    state["particle_filter"] = particle_filter.ParticleFilter(100, np.array([[0.1, 0], [0, 0.03]]), H, state["pos"].copy(), minimum_observations=6, distance_threshold=10, max_invalid_landmarks=12)
     
     best_particle = None
     for particle in state["particle_filter"].particles:
