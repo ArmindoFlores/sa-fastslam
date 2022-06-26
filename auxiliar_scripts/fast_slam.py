@@ -10,8 +10,9 @@ import numpy as np
 import landmark_extractor
 import particle_filter
 
-ODOM_SIGMA = .1
-LASER_SIGMA = .2
+ODOM_SIGMA = .001
+LASER_SIGMA = .01
+N = 10
 
 
 def H(xr, yr, tr):
@@ -83,8 +84,9 @@ def update_display(state):
     for i, landmark in enumerate(state["observed"]):
         equation = landmark.equation
         m = -equation[0] / equation[1]
-        b = -equation[2] / equation[1] * 10
-        b = -m * 80 + b + 80
+        b = -equation[2] / equation[1]
+        b = -m * 125 + b + 125
+        # b = -m * 80 + b + 80
         start = (0, b)
         end = (250, m * 250 + b)
         if len(state["landmarks2"]) > i:
@@ -102,9 +104,9 @@ def update_display(state):
             start = -equation[2] / equation[0], 0
             end = -equation[1] / equation[0] * 250 + start[0], 250
         if len(state["landmarks"]) > i:
-            state["landmarks"][i].set_data([start[1], end[1]], [start[0], end[0]])
+            state["landmarks"][i].set_data([start[0], end[0]], [start[1], end[1]])
         else:
-            state["landmarks"].append(state["ax"].plot([start[1], end[1]], [start[0], end[0]], color="green")[0])
+            state["landmarks"].append(state["ax"].plot([start[0], end[0]], [start[1], end[1]], color="green")[0])
     result += state["landmarks"]
     
     best_particle = None
@@ -142,7 +144,7 @@ def update(n, state):
     # displacement = normalize(state["destination"] - state["pos"]) * state["velocity"]
     mov_vector = state["destination"] - state["pos"][:2]
     correct_orientation = np.angle(mov_vector[0] + mov_vector[1] * 1j) % (2 * np.pi)
-    orientation_change = (correct_orientation - state["pos"][2]) * state["velocity"]
+    orientation_change = (correct_orientation - state["pos"][2]) * state["velocity"] * 0.1
     real_movement = np.array([
         state["velocity"] * np.cos(state["pos"][2] + orientation_change),
         state["velocity"] * np.sin(state["pos"][2] + orientation_change), 
@@ -154,12 +156,12 @@ def update(n, state):
     # Generate laser and odometry data based on the real movement
     odom_data = generate_odometry_data(real_movement)
     laser_data = None
-    if n % 10 == 0:
+    if n % N == 0:
         # Only generate laser data every 50 frames
         laser_data = generate_laser_data(state)
         
     # Update our particle filter  
-    state["particle_filter"].sample_pose(odom_data, (ODOM_SIGMA)**2 * np.ones(3))
+    state["particle_filter"].sample_pose(odom_data, (ODOM_SIGMA * N)**2 * np.ones(3))
     # state["particle_filter"].sample_pose((*real_movement, 0), np.zeros(3))
     if laser_data is not None:
         state["update_ls"] = True
@@ -167,8 +169,8 @@ def update(n, state):
         landmarks = landmark_extractor.extract_landmarks({
             "ranges": laser_data,
             "angle_increment": 2 * np.pi / 360,
-            "angle_min": 0 
-        }, 1, C=25, X=3)
+            "angle_min": 0
+        }, 2, C=20, X=2)
         state["observed"] = landmarks
         state["matches"] = []
         state["particle_filter"].observe_landmarks(landmarks)
@@ -207,7 +209,7 @@ def main():
     ax2.set_ylim([0, image.shape[1]])
     
     state = {
-        "velocity": 0.5,
+        "velocity": 0.1,
         "pos": np.resize((np.array(image.shape) / 2), 3),
         # "pos_guess": np.array(image.shape) / 2,
         "destination": np.array(image.shape) / 2,
