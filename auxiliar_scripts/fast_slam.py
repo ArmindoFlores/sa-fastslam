@@ -29,7 +29,8 @@ def normalize(v):
 def generate_odometry_data(real_movement):
     x = random.gauss(real_movement[0], ODOM_SIGMA)
     y = random.gauss(real_movement[1], ODOM_SIGMA)
-    return np.array((x, y, 0))
+    z = random.gauss(real_movement[2], ODOM_SIGMA)
+    return np.array((x, y, z))
 
 def generate_laser_data(state, l=360, r=100):
     increment = 2 * np.pi / l
@@ -37,11 +38,11 @@ def generate_laser_data(state, l=360, r=100):
     result = []
     for i in range(l):
         theta = increment * i
-        v = np.array([np.cos(theta), np.sin(theta)])
+        v = np.array([np.cos(theta + state["pos"][2]), np.sin(theta + state["pos"][2])])
         d = 0
         for distance in range(r):
-            fixed_pos = state["pos"].copy()
-            # fixed_pos[1] = 250 - fixed_pos[1]
+            fixed_pos = state["pos"][:2].copy()
+            # fixed_pos[1] = fixed_pos[1]
             pos = np.round(fixed_pos + v * distance).astype(np.int32)
             if (0 <= pos[0] < state["map_data"].shape[0]) and (0 <= pos[1] < state["map_data"].shape[1]):
                 if state["map_data"][pos[0]][pos[1]] == 0:
@@ -66,11 +67,12 @@ def laser_data_to_plot(data, img, scale, offset):
         
 def update_display(state):
     # result = [state["my_pos_guess"], state["my_pos"], state["dst_pos"]]
-    result = [state["my_pos"], state["dst_pos"]]
+    result = [state["my_pos"], state["my_pos_rot"], state["dst_pos"]]
     
     state["my_pos"].set_data(state["pos"][1], state["pos"][0])
     state["dst_pos"].set_data(state["destination"][1], state["destination"][0])
     # state["my_pos_guess"].set_data(state["pos_guess"][1], state["pos_guess"][0])
+    state["my_pos_rot"].set_data([state["pos"][1], state["pos"][1]+20*np.sin(state["pos"][2])], [state["pos"][0], state["pos"][0]+20*np.cos(state["pos"][2])])
     
     if state["update_ls"]:
         state["update_ls"] = False
@@ -79,8 +81,9 @@ def update_display(state):
         result.append(state["ls_img"])
         
     for i, landmark in enumerate(state["observed"]):
-        m = -landmark.equation[0] / landmark.equation[1]
-        b = -landmark.equation[2] / landmark.equation[1] * 10
+        equation = landmark.equation
+        m = -equation[0] / equation[1]
+        b = -equation[2] / equation[1] * 10
         b = -m * 80 + b + 80
         start = (0, b)
         end = (250, m * 250 + b)
@@ -90,17 +93,18 @@ def update_display(state):
             state["landmarks2"].append(state["ax2"].plot([start[1], end[1]], [start[0], end[0]], color="green")[0])
     result += state["landmarks2"]
             
-    for i, landmark in enumerate(state["matches"]):
-        if landmark.equation[1] != 0:
-            start = 0, -landmark.equation[2] / landmark.equation[1]
-            end = 250, -landmark.equation[0] / landmark.equation[1] * 250 + start[1]
+    for i, ekf in enumerate(state["matches"]):
+        equation = ekf.landmark.equation
+        if equation[1] != 0:
+            start = 0, -equation[2] / equation[1]
+            end = 250, -equation[0] / equation[1] * 250 + start[1]
         else:
-            start = -landmark.equation[2] / landmark.equation[0], 0
-            end = -landmark.equation[1] / landmark.equation[0] * 250 + start[0], 250
+            start = -equation[2] / equation[0], 0
+            end = -equation[1] / equation[0] * 250 + start[0], 250
         if len(state["landmarks"]) > i:
-            state["landmarks"][i].set_data([250 - start[1], 250 - end[1]], [250 - start[0], 250 - end[0]])
+            state["landmarks"][i].set_data([start[1], end[1]], [start[0], end[0]])
         else:
-            state["landmarks"].append(state["ax"].plot([250 - start[1], 250 - end[1]], [250 - start[0], 250 - end[0]], color="green")[0])
+            state["landmarks"].append(state["ax"].plot([start[1], end[1]], [start[0], end[0]], color="green")[0])
     result += state["landmarks"]
     
     best_particle = None
@@ -108,8 +112,8 @@ def update_display(state):
         if best_particle is None or particle.weight > best_particle.weight:
             best_particle = particle
         # print("Particle", i, particle.pose)
-        state["particles"][i].set_data([250 - particle.pose[1], 250 - particle.pose[0]])
-    state["best_particle"][0].set_data([250 - best_particle.pose[1], 250 - best_particle.pose[0]])
+        state["particles"][i].set_data([particle.pose[1], particle.pose[0]])
+    state["best_particle"][0].set_data([best_particle.pose[1], best_particle.pose[0]])
     result += state["particles"] + state["best_particle"]
         
     return result
@@ -128,19 +132,29 @@ def goes_through_wall(p1, p2, map_info):
     
 def update(n, state):
     # Move robot towards destination, or pick a new destination
-    if state["destination"] is None or euclidean_distance(state["destination"], state["pos"]) < 4:
+    if state["destination"] is None or euclidean_distance(state["destination"], state["pos"][:2]) < 4:
         while True:
             state["destination"] = random.choice(np.argwhere(state["map_data"] == 128))
-            if not goes_through_wall(state["destination"], state["pos"], state["map_data"]):
+            if not goes_through_wall(state["destination"], state["pos"][:2], state["map_data"]):
                 break
         state["velocity"] = (np.random.random() + 0.5) * 0.1
-    real_movement = normalize(state["destination"] - state["pos"]) *  state["velocity"]
+        
+    # displacement = normalize(state["destination"] - state["pos"]) * state["velocity"]
+    mov_vector = state["destination"] - state["pos"][:2]
+    correct_orientation = np.angle(mov_vector[0] + mov_vector[1] * 1j) % (2 * np.pi)
+    orientation_change = (correct_orientation - state["pos"][2]) * state["velocity"]
+    real_movement = np.array([
+        state["velocity"] * np.cos(state["pos"][2] + orientation_change),
+        state["velocity"] * np.sin(state["pos"][2] + orientation_change), 
+        orientation_change
+    ])
     state["pos"] += real_movement
+    state["pos"][2] %= 2 * np.pi
     
     # Generate laser and odometry data based on the real movement
     odom_data = generate_odometry_data(real_movement)
     laser_data = None
-    if n % 25 == 0:
+    if n % 10 == 0:
         # Only generate laser data every 50 frames
         laser_data = generate_laser_data(state)
         
@@ -162,7 +176,6 @@ def update(n, state):
         for particle in state["particle_filter"].particles:
             if best_particle is None or particle.weight > best_particle.weight:
                 best_particle = particle
-        print([ekf.landmark for ekf in best_particle.landmark_matcher.landmarks])
         state["matches"] = best_particle.landmark_matcher.valid_landmarks
         # print("\n".join(map(lambda l: str(l.landmark), best_particle.landmark_matcher.valid_landmarks)))
         # print("Mapped landmarks:", len(best_particle.landmark_matcher.valid_landmarks))
@@ -184,6 +197,7 @@ def main():
     ls_img = ax2.imshow(image, cmap="Greys", interpolation="nearest")
     
     my_pos, = ax1.plot([], [], "ro", markersize=3)
+    my_pos_rot, = ax1.plot([], [], "r")
     # my_pos_guess, = ax1.plot([], [], "go", markersize=3)
     dst_pos, = ax1.plot([], [], "bx")
     
@@ -194,10 +208,11 @@ def main():
     
     state = {
         "velocity": 0.5,
-        "pos": np.array(image.shape) / 2,
+        "pos": np.resize((np.array(image.shape) / 2), 3),
         # "pos_guess": np.array(image.shape) / 2,
         "destination": np.array(image.shape) / 2,
         "my_pos": my_pos,
+        "my_pos_rot": my_pos_rot,
         # "my_pos_guess": my_pos_guess,
         "dst_pos": dst_pos,
         "map_data": map_data,
