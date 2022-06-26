@@ -83,10 +83,10 @@ def quaternion_to_euler_angle(w, x, y, z):
         "z": np.arctan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
     }
 
-def H(xr, yr, tr):
+def H(xr, yr, t):
     """ Jacobian Matrix """
     
-    return np.array([[1, xr * np.sin(tr) - yr * np.cos(tr)], [0, 1]])
+    return np.array([[1, xr * np.sin(t) - yr * np.cos(t)], [0, 1]])
 
 def odom_callback(data):
     global last_pose_estimate, N_particles, bag_initial_time
@@ -281,7 +281,7 @@ def main():
     total_missed = 0
 
     global odom_covariance
-    odom_covariance = np.array([0.00001, 0.00005, 0.0005])
+    odom_covariance = np.array([0.00001, 0.00001, 0.0005])
     # odom_covariance = np.array([0.0, 0.0, 0.0])
 
     global Qt

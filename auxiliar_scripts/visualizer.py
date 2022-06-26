@@ -18,10 +18,10 @@ IMG_SIZE = 256
 def quaternion_to_euler(x, y, z, w):
     return np.arctan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y)), np.arcsin(2 * (w * y - z * x)), np.arctan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
 
-def H(xr, yr, tr):
-    return np.array([[1, xr * np.sin(tr) - yr * np.cos(tr)], [0, 1]])
+def H(xr, yr, t):
+    return np.array([[1, xr * np.sin(t) - yr * np.cos(t)], [0, 1]])
 
-def main(save=True, display=True):
+def main(save=True, display=False):
     global positions
     scan_files = loader.from_dir(SCANS_DIR, "ls")
     try:
@@ -72,7 +72,7 @@ def main(save=True, display=True):
     active_scan = None
     new_scan = False
     best_particle = None
-    for i in tqdm.tqdm(range(200, len(odoms))):
+    for i in tqdm.tqdm(range(100, len(odoms))):
         pose_estimate = positions[i] - positions[i-1]
         
         new_scan = False
@@ -85,7 +85,7 @@ def main(save=True, display=True):
         
         # Update particle filter with new odometry data
         if np.sum(np.abs(pose_estimate)) > 0.00001:
-            pf.sample_pose(pose_estimate, np.array([0.001, 0.001, 0.001]))
+            pf.sample_pose(pose_estimate, np.array([0.00001, 0.00001, 0.0005]))
         
         img = np.ones((IMG_SIZE, IMG_SIZE), dtype=np.uint8) * 255
         ax1_scale_factor = IMG_SIZE // 30

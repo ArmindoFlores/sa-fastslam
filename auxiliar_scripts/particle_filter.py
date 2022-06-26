@@ -16,7 +16,6 @@ class Particle:
         self.weight = 1
         self.Qt = Qt
         self.H_func = H_func
-        self.H = None
         self.landmark_matcher = landmark_matching.LandmarkMatcher(Qt=Qt, **landmark_matcher_kwargs)
         
     def __repr__(self):
@@ -26,7 +25,7 @@ class Particle:
         """Try to match an observed landmark to list of previously seen ones and update its location 
         estimate and the particle's weight.
         """
-        match = self.landmark_matcher.observe(landmark, self.H, self.pose)
+        match = self.landmark_matcher.observe(landmark, self.H_func, self.pose)
         if match is not None:
             self.weigh(landmark.params(), match)
             return True
@@ -42,9 +41,6 @@ class Particle:
         theta_estimate = np.random.normal(theta, np.sqrt(variance[2]))
         odom = np.array([r_estimate * np.cos(self.pose[2]), r_estimate * np.sin(self.pose[2]), theta_estimate])
         self.pose += odom
-        
-    def eval_H(self):
-        self.H = self.H_func(*self.pose)
 
     def weigh(self, z_measured, match):
         """Weigh the particle's importance after observing a new landmark.
@@ -54,7 +50,8 @@ class Particle:
         """
         landmark = match.landmark
         z_predicted = landmark.params(self.pose)
-        Q = self.H.dot(match.covariance).dot(self.H.T) + self.Qt
+        H = self.H_func(*self.pose[:2], landmark.params()[1])
+        Q = H.dot(match.covariance).dot(H.T) + self.Qt
         Z = z_measured - z_predicted
         self.weight *= np.exp(-0.5 * Z.T.dot(np.linalg.inv(Q)).dot(Z)) / np.sqrt(np.linalg.det(2 * np.pi * Q))
         
@@ -83,7 +80,6 @@ class ParticleFilter:
         total = 0
         max_match = 0
         for particle in self.particles:
-            particle.eval_H()
             total_matches = 0
             for landmark in landmarks:
                 if particle.observe_landmark(landmark):
