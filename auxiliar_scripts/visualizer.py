@@ -103,6 +103,7 @@ def main(save=True, display=False):
                     X=0.01,
                     N=150
                 )
+                # total = sum([len(particle.landmark_matcher.landmarks) for particle in pf.particles])
                 if len(landmarks) != 0:
                     pf.observe_landmarks(landmarks)
                 prev_landmarks = landmarks

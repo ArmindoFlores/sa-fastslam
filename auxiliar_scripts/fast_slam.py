@@ -10,8 +10,9 @@ import numpy as np
 import landmark_extractor
 import particle_filter
 
-ODOM_SIGMA = .1
-LASER_SIGMA = .2
+ODOM_SIGMA = np.array([0.001, 0.001, 0.01])
+LASER_SIGMA = .01
+N = 10
 
 
 def H(xr, yr, tr):
@@ -26,11 +27,10 @@ def euclidean_distance(x, y):
 def normalize(v):
     return v / np.linalg.norm(v)
 
-def generate_odometry_data(real_movement):
-    x = random.gauss(real_movement[0], ODOM_SIGMA)
-    y = random.gauss(real_movement[1], ODOM_SIGMA)
-    z = random.gauss(real_movement[2], ODOM_SIGMA)
-    return np.array((x, y, z))
+def generate_odometry_data(real_movement, real_pos):
+    r = random.gauss(np.linalg.norm(real_movement[:2]), ODOM_SIGMA[0])
+    t = random.gauss(real_movement[2], ODOM_SIGMA[2])
+    return np.array((r * np.cos(real_pos[2]), r * np.sin(real_pos[2]), t))
 
 def generate_laser_data(state, l=360, r=100):
     increment = 2 * np.pi / l
@@ -67,12 +67,14 @@ def laser_data_to_plot(data, img, scale, offset):
         
 def update_display(state):
     # result = [state["my_pos_guess"], state["my_pos"], state["dst_pos"]]
-    result = [state["my_pos"], state["my_pos_rot"], state["dst_pos"]]
+    result = [state["my_pos"], state["my_pos_rot"], state["dst_pos"], state["my_odom"], state["my_odom_rot"]]
     
     state["my_pos"].set_data(state["pos"][1], state["pos"][0])
+    state["my_odom"].set_data(state["odom"][1], state["odom"][0])
     state["dst_pos"].set_data(state["destination"][1], state["destination"][0])
     # state["my_pos_guess"].set_data(state["pos_guess"][1], state["pos_guess"][0])
     state["my_pos_rot"].set_data([state["pos"][1], state["pos"][1]+20*np.sin(state["pos"][2])], [state["pos"][0], state["pos"][0]+20*np.cos(state["pos"][2])])
+    state["my_odom_rot"].set_data([state["odom"][1], state["odom"][1]+20*np.sin(state["odom"][2])], [state["odom"][0], state["odom"][0]+20*np.cos(state["odom"][2])])
     
     # if state["update_ls"]:
     state["update_ls"] = False
@@ -83,8 +85,9 @@ def update_display(state):
     for i, landmark in enumerate(state["observed"]):
         equation = landmark.equation
         m = -equation[0] / equation[1]
-        b = -equation[2] / equation[1] * 10
-        b = -m * 80 + b + 80
+        b = -equation[2] / equation[1]
+        b = -m * 125 + b + 125
+        # b = -m * 80 + b + 80
         start = (0, b)
         end = (250, m * 250 + b)
         if len(state["landmarks2"]) > i:
@@ -114,7 +117,8 @@ def update_display(state):
         # print("Particle", i, particle.pose)
         state["particles"][i].set_data([particle.pose[1], particle.pose[0]])
     state["best_particle"][0].set_data([best_particle.pose[1], best_particle.pose[0]])
-    result += state["particles"] + state["best_particle"]
+    state["best_particle_rot"].set_data([best_particle.pose[1], best_particle.pose[1]+20*np.sin(best_particle.pose[2])], [best_particle.pose[0], best_particle.pose[0]+20*np.cos(best_particle.pose[2])])
+    result += state["particles"] + state["best_particle"] + [state["best_particle_rot"]]
         
     return result
 
@@ -132,34 +136,39 @@ def goes_through_wall(p1, p2, map_info):
     
 def update(n, state):
     # Move robot towards destination, or pick a new destination
-    if state["destination"] is None or euclidean_distance(state["destination"], state["pos"][:2]) < 4:
+    if n > 100 and (state["destination"] is None or euclidean_distance(state["destination"], state["pos"][:2]) < 4):
         while True:
             state["destination"] = random.choice(np.argwhere(state["map_data"] == 128))
             if not goes_through_wall(state["destination"], state["pos"][:2], state["map_data"]):
                 break
-        state["velocity"] = (np.random.random() + 0.5) * 0.1
         
     # displacement = normalize(state["destination"] - state["pos"]) * state["velocity"]
-    mov_vector = state["destination"] - state["pos"][:2]
-    correct_orientation = np.angle(mov_vector[0] + mov_vector[1] * 1j) % (2 * np.pi)
-    orientation_change = (correct_orientation - state["pos"][2]) * state["velocity"]
-    real_movement = np.array([
-        state["velocity"] * np.cos(state["pos"][2] + orientation_change),
-        state["velocity"] * np.sin(state["pos"][2] + orientation_change), 
-        orientation_change
-    ])
-    state["pos"] += real_movement
-    state["pos"][2] %= 2 * np.pi
+    if n > 100:
+        mov_vector = state["destination"] - state["pos"][:2]
+        correct_orientation = np.angle(mov_vector[0] + mov_vector[1] * 1j) % (2 * np.pi)
+        orientation_change = (correct_orientation - state["pos"][2]) * state["velocity"] * 0.1
+        real_movement = np.array([
+            state["velocity"] * np.cos(state["pos"][2] + orientation_change),
+            state["velocity"] * np.sin(state["pos"][2] + orientation_change), 
+            orientation_change
+        ])
+        state["pos"] += real_movement
+        state["pos"][2] %= 2 * np.pi
+    else:
+        real_movement = np.array([0, 0, 0])
     
     # Generate laser and odometry data based on the real movement
-    odom_data = generate_odometry_data(real_movement)
+    odom_data = generate_odometry_data(real_movement, state["odom"])
     laser_data = None
-    if n % 10 == 0:
+    if n % N == 0:
         # Only generate laser data every 50 frames
         laser_data = generate_laser_data(state)
-        
-    # Update our particle filter  
-    state["particle_filter"].sample_pose(odom_data, (ODOM_SIGMA)**2 * np.ones(3))
+     
+    print(odom_data)
+    if abs(odom_data[0]) > 0.01 or abs(odom_data[1]) > 0.01 or abs(odom_data[2]) > 0.01:
+        state["odom"] += odom_data
+        # Update our particle filter  
+        state["particle_filter"].sample_pose(odom_data, ODOM_SIGMA**2)
     # state["particle_filter"].sample_pose((*real_movement, 0), np.zeros(3))
     if laser_data is not None:
         state["update_ls"] = True
@@ -167,8 +176,8 @@ def update(n, state):
         landmarks = landmark_extractor.extract_landmarks({
             "ranges": laser_data,
             "angle_increment": 2 * np.pi / 360,
-            "angle_min": 0 
-        }, 1, C=25, X=3)
+            "angle_min": 0
+        }, 10, C=25, X=2, N=150)
         state["observed"] = landmarks
         state["matches"] = []
         state["particle_filter"].observe_landmarks(landmarks)
@@ -180,7 +189,7 @@ def update(n, state):
         # print("\n".join(map(lambda l: str(l.landmark), best_particle.landmark_matcher.valid_landmarks)))
         # print("Mapped landmarks:", len(best_particle.landmark_matcher.valid_landmarks))
         
-        state["particle_filter"].resample(frac=0.8)
+        state["particle_filter"].resample(frac=0.9)
         
     return update_display(state)
 
@@ -197,7 +206,10 @@ def main():
     ls_img = ax2.imshow(image, cmap="Greys", interpolation="nearest")
     
     my_pos, = ax1.plot([], [], "ro", markersize=3)
+    my_odom, = ax1.plot([], [], "bo", markersize=3)
     my_pos_rot, = ax1.plot([], [], "r")
+    best_particle_rot, = ax1.plot([], [], "g")
+    my_odom_rot, = ax1.plot([], [], "b")
     # my_pos_guess, = ax1.plot([], [], "go", markersize=3)
     dst_pos, = ax1.plot([], [], "bx")
     
@@ -207,13 +219,15 @@ def main():
     ax2.set_ylim([0, image.shape[1]])
     
     state = {
-        "velocity": 0.5,
+        "velocity": 0.1,
         "pos": np.resize((np.array(image.shape) / 2), 3),
+        "odom": np.resize((np.array(image.shape) / 2), 3),
         # "pos_guess": np.array(image.shape) / 2,
         "destination": np.array(image.shape) / 2,
         "my_pos": my_pos,
         "my_pos_rot": my_pos_rot,
-        # "my_pos_guess": my_pos_guess,
+        "my_odom": my_odom,
+        "my_odom_rot": my_odom_rot,
         "dst_pos": dst_pos,
         "map_data": map_data,
         "ls_img": ls_img,
@@ -221,14 +235,20 @@ def main():
         "update_ls": False,
         "ax": ax1,
         "ax2": ax2,
-        "particle_filter": particle_filter.ParticleFilter(100, np.array([[0.1, 0], [0, 0.03]]), H, (*(np.array(image.shape) / 2), 0), minimum_observations=6, distance_threshold=10, max_invalid_landmarks=12),
+        "particle_filter": None,
         "particles": [],
         "matches": [],
         "landmarks": [],
         "best_particle": [],
+        "best_particle_rot": best_particle_rot,
         "observed": [],
         "landmarks2": []
     }
+    state["pos"][1] -= 50
+    state["pos"][2] = 0
+    state["destination"] = state["pos"][:2].copy()
+    state["odom"] = state["pos"].copy()
+    state["particle_filter"] = particle_filter.ParticleFilter(100, np.array([[0.01, 0], [0, 0.003]]), H, state["pos"].copy(), minimum_observations=6, distance_threshold=20, max_invalid_landmarks=12)
     
     best_particle = None
     for particle in state["particle_filter"].particles:

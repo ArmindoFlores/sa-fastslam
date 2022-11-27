@@ -80,7 +80,7 @@ class Landmark:
             theta = np.arctan2(- b * c / (a**2 + b**2), - a * c / (a**2 + b**2))
         else:
             theta = np.arctan2(- b / (a**2 + b**2), - a / (a**2 + b**2))
-        r = (abs(c) / np.sqrt(a**2 + b**2)) % (2 * np.pi)
+        r = (abs(c) / np.sqrt(a**2 + b**2))
         return Landmark(r, theta, r2)
 
 def to_cartesian(theta, r):
@@ -192,7 +192,7 @@ def extract_features(ls, N=300, C=22, X=0.02, D=10, S=6):
             if distance < X:
                 close_enough[close_enough_size] = i
                 close_enough_size += 1
-            if distance < 5 * X:
+            if distance < 3 * X:
                 try:
                     available.remove(i)
                 except ValueError:
