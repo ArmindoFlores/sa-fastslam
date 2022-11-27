@@ -1,8 +1,9 @@
-build
 devel
+build
+bin
+lib
 laser-scans
 odometry
 maps
 bags
 .catkin_workspace
-.vscode/settings.json
