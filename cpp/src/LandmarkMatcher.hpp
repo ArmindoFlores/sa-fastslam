@@ -24,7 +24,7 @@ public:
         \param max_invalid_landmarks the maximum number of invalid landmarks to
         keep track of [NOT IMPLEMENTED!]
     */
-    LandmarkMatcher(cv::Mat Qt, int minimum_observations=6, double distance_threshold=0.3, int max_invalid_landmarks=-1);
+    LandmarkMatcher(const cv::Mat& Qt, int minimum_observations=6, double distance_threshold=0.3, int max_invalid_landmarks=-1);
     LandmarkMatcher(const LandmarkMatcher&);
     LandmarkMatcher(LandmarkMatcher&&);
     LandmarkMatcher& operator = (const LandmarkMatcher&);
@@ -40,7 +40,7 @@ public:
         \param pose the robot's pose
         \return The matching landmark, if found 
     */
-    std::optional<Landmark> observe(const Landmark& landmark, std::function<cv::Mat(double, double, double)> H, cv::Vec3d pose);
+    std::optional<Landmark> observe(const Landmark& landmark, std::function<cv::Mat(double, double, double)> H, const cv::Vec3d& pose);
     /*
         \return A vector of all valid landmarks
     */

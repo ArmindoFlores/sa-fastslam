@@ -1,6 +1,6 @@
 #include "KalmanFilter.hpp"
 
-KalmanFilter::KalmanFilter(const Landmark& landmark, cv::Mat covariance, cv::Mat Qt)
+KalmanFilter::KalmanFilter(const Landmark& landmark, const cv::Mat& covariance, const cv::Mat& Qt)
     : landmark(landmark)
     , covariance(covariance)
     , Qt(Qt)

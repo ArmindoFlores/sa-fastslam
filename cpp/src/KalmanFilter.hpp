@@ -17,7 +17,7 @@ public:
         \param covariance the initial 2x2 covariance matrix
         \param Qt the 2x2 sensor covariance matrix
     */
-    KalmanFilter(const Landmark& landmark, cv::Mat covariance, cv::Mat Qt);
+    KalmanFilter(const Landmark& landmark, const cv::Mat& covariance, const cv::Mat& Qt);
     KalmanFilter(const KalmanFilter&);
     KalmanFilter(KalmanFilter&&);
 

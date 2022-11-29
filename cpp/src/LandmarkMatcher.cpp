@@ -1,6 +1,6 @@
 #include "LandmarkMatcher.hpp"
 
-LandmarkMatcher::LandmarkMatcher(cv::Mat Qt, int minimum_observations, double distance_threshold, int max_invalid_landmarks)
+LandmarkMatcher::LandmarkMatcher(const cv::Mat& Qt, int minimum_observations, double distance_threshold, int max_invalid_landmarks)
     : Qt(Qt)
     , minimum_observations(minimum_observations)
     , distance_threshold(distance_threshold)
@@ -41,7 +41,7 @@ LandmarkMatcher& LandmarkMatcher::operator = (LandmarkMatcher&& l)
     return *this;
 }
 
-std::optional<Landmark> LandmarkMatcher::observe(const Landmark& landmark, std::function<cv::Mat(double, double, double)> h_func, cv::Vec3d pose)
+std::optional<Landmark> LandmarkMatcher::observe(const Landmark& landmark, std::function<cv::Mat(double, double, double)> h_func, const cv::Vec3d& pose)
 {
     double threshold_distance_squared = distance_threshold*distance_threshold;
     std::optional<Landmark> match {};
