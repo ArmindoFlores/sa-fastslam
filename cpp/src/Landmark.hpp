@@ -24,6 +24,8 @@ public:
     Landmark(double a, double b, double c);
     Landmark(const Landmark&) = default;
     Landmark(Landmark&&);
+    Landmark& operator = (const Landmark&);
+    Landmark& operator = (Landmark&&);
 
     /*
         Update this landmark's parameters

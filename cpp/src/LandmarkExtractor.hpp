@@ -1,8 +1,14 @@
 #ifndef _H_LANDMARK_EXTRACTOR_
 #define _H_LANDMARK_EXTRACTOR_
 
+#include "Landmark.hpp"
 #include <opencv2/core.hpp>
 #include <vector>
+
+enum class ExtractionAlgorithm {
+    RANSAC,
+    HOUGH
+};
 
 /*
     Convert coordinates in a polar system to a cartesian one
@@ -51,6 +57,6 @@ std::vector<RANSACResult> RANSAC(
     std::size_t S
 );
 
-// std::vector<cv::Vec3d> extract_features(const std::vector<double>& points, int threshold=20);
+std::vector<Landmark> extract_landmarks(const std::vector<double>& points, ExtractionAlgorithm algo=ExtractionAlgorithm::RANSAC);
 
 #endif

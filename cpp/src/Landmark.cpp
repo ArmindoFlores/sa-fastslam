@@ -19,6 +19,18 @@ Landmark::Landmark(Landmark&& other)
     r = other.r;
     theta = other.theta;
 }
+Landmark& Landmark::operator = (const Landmark& l)
+{
+    r = l.r;
+    theta = l.theta;
+    return *this;
+}
+Landmark& Landmark::operator = (Landmark&& l)
+{
+    r = l.r;
+    theta = l.theta;
+    return *this;
+}
 
 void Landmark::update_parameters(double r, double theta)
 {
