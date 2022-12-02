@@ -20,6 +20,8 @@ public:
     KalmanFilter(const Landmark& landmark, const cv::Mat& covariance, const cv::Mat& Qt);
     KalmanFilter(const KalmanFilter&);
     KalmanFilter(KalmanFilter&&);
+    KalmanFilter& operator = (const KalmanFilter&);
+    KalmanFilter& operator = (KalmanFilter&&);
 
     /*
         \return The 2x2 covariance matrix associated with this landmark

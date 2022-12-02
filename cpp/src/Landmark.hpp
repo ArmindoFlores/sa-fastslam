@@ -43,6 +43,14 @@ public:
     cv::Vec2d get_parameters() const;
 
     /*
+    Get this landmark's parameters
+
+    \param pose the landmark's parameters will be relative to this pose
+    \return A vector [r theta]
+    */
+    cv::Vec2d get_parameters(const cv::Vec3d& pose) const;
+
+    /*
         Compute the closest point on the landmark to specified position
 
         \param position point to compute

@@ -43,6 +43,20 @@ cv::Vec2d Landmark::get_parameters() const
     return cv::Vec2d {r, theta};
 }
 
+cv::Vec2d Landmark::get_parameters(const cv::Vec3d& pose) const
+{
+    cv::Vec2d computed_params {
+        r - pose[0] * std::cos(theta) - pose[1] * std::sin(theta), 
+        theta - pose[2]
+    };
+    if (computed_params[0] < 0) {
+        computed_params[0] *= -1;
+        computed_params[1] += M_PI;
+    }
+    computed_params[1] = std::fmod(computed_params[1], 2 * M_PI);
+    return computed_params;
+}
+
 cv::Vec2d Landmark::closest_point(const cv::Vec2d& position) const
 {
     return closest_point(position(0), position(1));

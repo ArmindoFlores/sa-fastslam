@@ -57,6 +57,13 @@ std::vector<RANSACResult> RANSAC(
     std::size_t S
 );
 
+/*
+    This functions returns a list of found landmarks from a laser scan
+
+    \param points the vector of ranges from a laser scan
+    \param algo the algorithm to use
+    \return The vector of found landmarks
+*/
 std::vector<Landmark> extract_landmarks(const std::vector<double>& points, ExtractionAlgorithm algo=ExtractionAlgorithm::RANSAC);
 
 #endif

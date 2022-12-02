@@ -41,10 +41,10 @@ LandmarkMatcher& LandmarkMatcher::operator = (LandmarkMatcher&& l)
     return *this;
 }
 
-std::optional<Landmark> LandmarkMatcher::observe(const Landmark& landmark, std::function<cv::Mat(double, double, double)> h_func, const cv::Vec3d& pose)
+std::optional<KalmanFilter> LandmarkMatcher::observe(const Landmark& landmark, std::function<cv::Mat(double, double, double)> h_func, const cv::Vec3d& pose)
 {
     double threshold_distance_squared = distance_threshold*distance_threshold;
-    std::optional<Landmark> match {};
+    std::optional<KalmanFilter> match {};
     
     // Convert observed landmark to world space
     cv::Vec2d params = landmark.get_parameters();
@@ -74,7 +74,7 @@ std::optional<Landmark> LandmarkMatcher::observe(const Landmark& landmark, std::
         filters[closest].first->update(new_params, H);
         filters[closest] = std::make_pair(filters[closest].first, filters[closest].second+1);
         if (filters[closest].second >= (std::size_t) minimum_observations)
-            match = filters[closest].first->view_landmark();
+            match = *filters[closest].first;
     }
     else {
         // No matches were found, add a new landmark

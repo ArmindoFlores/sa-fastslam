@@ -15,6 +15,20 @@ KalmanFilter::KalmanFilter(KalmanFilter&& kf)
     , covariance(std::move(kf.covariance))
     , Qt(std::move(kf.Qt))
 {}
+KalmanFilter& KalmanFilter::operator = (const KalmanFilter& ekf)
+{
+    landmark = ekf.landmark;
+    covariance = ekf.covariance;
+    Qt = ekf.Qt;
+    return *this;
+}
+KalmanFilter& KalmanFilter::operator = (KalmanFilter&& ekf)
+{
+    landmark = std::move(ekf.landmark);
+    covariance = std::move(ekf.covariance);
+    Qt = std::move(ekf.Qt);
+    return *this;
+}
 
 const cv::Mat& KalmanFilter::get_covariance() const
 {

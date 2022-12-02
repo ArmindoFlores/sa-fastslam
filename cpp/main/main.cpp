@@ -4,9 +4,8 @@
 
 #include <boost/json/src.hpp>
 
-#include "Landmark.hpp"
 #include "LandmarkExtractor.hpp"
-#include "LandmarkMatcher.hpp"
+#include "ParticleFilter.hpp"
 
 cv::Mat function_h(double x, double y, double theta)
 {
@@ -39,23 +38,17 @@ int main()
     cv::Mat Qt {2, 2, CV_64F, data};   
     cv::Vec3d base_pose {0.0, 0.0, 0.0}; 
 
-    LandmarkMatcher matcher {Qt};
+    ParticleFilter pf {200, Qt, function_h};
 
     auto start = std::chrono::high_resolution_clock::now();
     auto extracted = extract_landmarks(points);
     std::cout << "Extracted " << extracted.size() << " landmarks!" << std::endl;
-    for (const auto& landmark : extracted) {
-        matcher.observe(
-            landmark, 
-            function_h,
-            base_pose
-        );
-    }
+    pf.observe_landmarks(extracted);
     auto end = std::chrono::high_resolution_clock::now();
 
     std::cout << "Time elapsed: " << (end - start).count() / 1e6 << " ms" << std::endl; 
 
-    for (const auto& landmark : matcher.get_full_map()) {
-        std::cout << landmark << std::endl;
+    for (const auto& particle : pf.get_particles()) {
+        std::cout << particle << std::endl;
     }
 }

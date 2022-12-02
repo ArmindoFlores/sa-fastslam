@@ -40,7 +40,7 @@ public:
         \param pose the robot's pose
         \return The matching landmark, if found 
     */
-    std::optional<Landmark> observe(const Landmark& landmark, std::function<cv::Mat(double, double, double)> H, const cv::Vec3d& pose);
+    std::optional<KalmanFilter> observe(const Landmark& landmark, std::function<cv::Mat(double, double, double)> H, const cv::Vec3d& pose);
     /*
         \return A vector of all valid landmarks
     */
