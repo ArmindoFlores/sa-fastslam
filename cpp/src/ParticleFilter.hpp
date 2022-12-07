@@ -61,6 +61,11 @@ public:
     */
     void set_weight(double weight);
 
+    /*
+        \return The particle's weight
+    */
+    double get_weight() const;
+
     friend std::ostream& operator << (std::ostream&, const Particle&);
 
 private:

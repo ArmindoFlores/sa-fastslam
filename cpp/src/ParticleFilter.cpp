@@ -62,6 +62,11 @@ void Particle::set_weight(double weight)
     this->weight = weight;
 }
 
+double Particle::get_weight() const
+{
+    return weight;
+}
+
 void Particle::weigh(const cv::Vec2d& measurement, const KalmanFilter& matched_landmark)
 {
     Landmark landmark {matched_landmark.view_landmark()};
@@ -111,7 +116,26 @@ void ParticleFilter::observe_landmarks(const std::vector<Landmark>& landmarks)
 
 void ParticleFilter::resample(std::size_t N, double frac)
 {
-
+    std::size_t n1 = round(frac * N);
+    std::size_t n2 = N - n1;
+    double total_weight = std::accumulate(particles.begin(), particles.end(), 0.0, [](double acc, const Particle& p){ return acc + p.get_weight(); });
+    if (total_weight == 0 || std::isnan(total_weight)) {
+        for (Particle& particle : particles)
+            particle.set_weight(1);
+        return;
+    }
+    std::vector<double> normalized_weights(particles.size());
+    std::transform(particles.begin(), particles.end(), normalized_weights.begin(), [total_weight](const Particle& p){ return p.get_weight()/total_weight; });
+    std::discrete_distribution<> distribution(normalized_weights.begin(), normalized_weights.end());
+    std::uniform_int_distribution<int> uniform(0, N);
+    
+    std::vector<Particle> new_particles;
+    for (std::size_t i = 0; i < n1; i++)
+        new_particles.push_back(particles[distribution(generator)]);
+    for (std::size_t i = 0; i < n2; i++)
+        new_particles.push_back(particles[uniform(generator)]);
+    
+    particles = std::move(new_particles);
 }
 
 void ParticleFilter::resample(double frac)
