@@ -29,6 +29,7 @@
 
   <depend>std_msgs</depend>
   <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
   <!-- The *depend tags are used to specify dependencies -->
   <!-- Dependencies can be catkin packages or system dependencies -->
   <!-- Examples: -->
