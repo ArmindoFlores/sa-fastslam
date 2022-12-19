@@ -67,6 +67,11 @@ double Particle::get_weight() const
     return weight;
 }
 
+const cv::Vec3d& Particle::get_pose() const
+{
+    return pose;
+}
+
 void Particle::weigh(const cv::Vec2d& measurement, const KalmanFilter& matched_landmark)
 {
     Landmark landmark {matched_landmark.view_landmark()};
@@ -127,7 +132,7 @@ void ParticleFilter::resample(std::size_t N, double frac)
     std::vector<double> normalized_weights(particles.size());
     std::transform(particles.begin(), particles.end(), normalized_weights.begin(), [total_weight](const Particle& p){ return p.get_weight()/total_weight; });
     std::discrete_distribution<> distribution(normalized_weights.begin(), normalized_weights.end());
-    std::uniform_int_distribution<int> uniform(0, N);
+    std::uniform_int_distribution<int> uniform(0, N-1);
     
     std::vector<Particle> new_particles;
     for (std::size_t i = 0; i < n1; i++)

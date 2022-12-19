@@ -66,6 +66,11 @@ public:
     */
     double get_weight() const;
 
+    /*
+        \return The particle's pose
+    */
+    const cv::Vec3d& get_pose() const;
+
     friend std::ostream& operator << (std::ostream&, const Particle&);
 
 private:
