@@ -117,9 +117,9 @@ void scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
   {
     std::unique_lock<std::mutex> lck(particle_filter_mtx);
     // Update particle weights using extracted landmarks
-    // particle_filter->observe_landmarks(extracted);
+    particle_filter->observe_landmarks(extracted);
     // Perform resampling
-    // particle_filter->resample(RESAMPLE_PROPORTIONAL_FRACTION);
+    particle_filter->resample(RESAMPLE_PROPORTIONAL_FRACTION);
     end = ros::Time::now();
     particles = particle_filter->get_particles();
   }
@@ -182,9 +182,22 @@ void scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
   ps.pose.position.y = best_particle.get_pose()(1);
   ps.pose.position.z = 0;
 
+  geometry_msgs::PoseArray pa;
+  pa.header.stamp = og.header.stamp;
+  pa.header.frame_id = "map";
+  for (const Particle& particle : particles) {
+    geometry_msgs::Pose pose_for_array;
+    pose_for_array.orientation = euler_angle_to_quaternion(0, 0, particle.get_pose()(2));
+    pose_for_array.position.x = particle.get_pose()(0);
+    pose_for_array.position.y = particle.get_pose()(1);
+    pose_for_array.position.z = 0;
+    pa.poses.push_back(pose_for_array);
+  }
+
   map_metadata_publisher.publish(md);
   map_publisher.publish(og);
   pose_publisher.publish(ps);
+  pose_array_publisher.publish(pa);
 }
 
 cv::Mat function_h(double x, double y, double theta)
@@ -220,7 +233,7 @@ int main(int argc, char* argv[])
   {
     std::unique_lock<std::mutex> lck(particle_filter_mtx);
     // Instantiate a new particle filter
-    particle_filter = std::make_unique<ParticleFilter>(100, cv::Mat {2, 2, CV_64F, Qtdata}, function_h);
+    particle_filter = std::make_unique<ParticleFilter>(200, cv::Mat {2, 2, CV_64F, Qtdata}, function_h);
   }
 
   ROS_INFO("Initialized particle filter, waiting for data...");
