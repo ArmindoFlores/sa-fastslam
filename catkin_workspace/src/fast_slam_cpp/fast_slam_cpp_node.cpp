@@ -91,8 +91,6 @@ void odom_callback(const nav_msgs::Odometry::ConstPtr& msg)
   cv::Vec2d transformed_pose_estimate {std::sqrt(pose_estimate[0]*pose_estimate[0] + pose_estimate[1]*pose_estimate[1]), pose_estimate[2]};
   last_pose = pose;
 
-  std::cout << transformed_pose_estimate << std::endl;
-
   std::unique_lock<std::mutex> lck(particle_filter_mtx);
   // Update the positions of all particles
   particle_filter->sample_pose(transformed_pose_estimate, odom_variance);
@@ -135,20 +133,25 @@ void scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
   });
 
   for (std::size_t i = 0; i < points.size(); i++) {
-    cv::Vec2d point = polar_to_cartesian(2 * M_PI / points.size() * i, points[i]);
+    if (points[i] <= 0.001)
+      continue;
+    cv::Vec2d point = polar_to_cartesian(2 * M_PI / points.size() * i + best_particle.get_pose()(2), points[i]);
     point(0) += best_particle.get_pose()(0);
     point(1) += best_particle.get_pose()(1);
     point *= 1.0 / MAP_RESOLUTION;
 
-    std::size_t row = MAP_HEIGHT / 2.0 + point(1);
-    std::size_t column = MAP_WIDTH / 2.0 + point(0);
-    std::size_t index = row * MAP_HEIGHT + column;
+    std::size_t row = (std::size_t) (MAP_HEIGHT / 2.0 + point(1));
+    std::size_t column = (std::size_t) (MAP_WIDTH / 2.0 + point(0));
+    std::size_t index = row * MAP_WIDTH + column;
 
     if (index > best_map_estimate.size())
       continue;
 
-    if (best_map_estimate[index] < 100)
-      best_map_estimate[index]++;
+    if (best_map_estimate[index] < 100) {
+      if (best_map_estimate[index] == -1)
+        best_map_estimate[index] = 1;
+      best_map_estimate[index] += 2;
+    }
   }
 
   nav_msgs::MapMetaData md;
