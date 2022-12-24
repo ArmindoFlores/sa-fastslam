@@ -8,7 +8,8 @@ def transformation(reading):
     for i in range(len(reading)):
         theta = i * np.pi / 180
         r = reading[i]
-        coordinates.append([r * math.cos(theta), r * math.sin(theta), 1])
+        if r != 0:
+            coordinates.append([r * math.cos(theta), r * math.sin(theta), 1])
     coordinates = np.array(coordinates)
 
     # Translation + Rotation
