@@ -1,7 +1,7 @@
 #include "ParticleFilter.hpp"
 
 Particle::Particle(const cv::Mat& Qt, std::function<cv::Mat(double, double, double)> H, const cv::Vec3d& pose)
-    : weight(0)
+    : weight(1.0)
     , Qt(Qt)
     , h_func(H)
     , pose(pose)
@@ -80,7 +80,9 @@ void Particle::weigh(const cv::Vec2d& measurement, const KalmanFilter& matched_l
     cv::transpose(H, H_transposed);
     cv::Mat Q = H * matched_landmark.get_covariance() * H_transposed + Qt;
     cv::Vec2d Z = measurement - z_predicted;
-    weight *= std::exp(((cv::Mat) (-0.5 * Z * Q.inv() * Z)).at<double>(0, 0)) / std::sqrt(cv::determinant(2 * M_PI * Q));
+    cv::Mat Zt;
+    cv::transpose(Z, Zt);
+    weight *= std::exp(((cv::Mat) (-0.5 * Zt * Q.inv() * Z)).at<double>(0, 0)) / std::sqrt(cv::determinant(2 * M_PI * Q));
 }
 
 std::ostream& operator << (std::ostream& os, const Particle& p)
@@ -110,13 +112,17 @@ void ParticleFilter::sample_pose(const cv::Vec2d& odometry_reading, const cv::Ve
         particle.update_pose(r, theta, variance);
 }
 
-void ParticleFilter::observe_landmarks(const std::vector<Landmark>& landmarks)
+std::size_t ParticleFilter::observe_landmarks(const std::vector<Landmark>& landmarks)
 {
+    std::size_t matches = 0;
     for (auto& particle : particles) {
         for (const auto& landmark : landmarks) {
-            particle.observe_landmark(landmark);
+            auto match = particle.observe_landmark(landmark);
+            if (match.has_value())
+                matches++;
         }
     }
+    return matches;
 }
 
 void ParticleFilter::resample(std::size_t N, double frac)
@@ -135,10 +141,14 @@ void ParticleFilter::resample(std::size_t N, double frac)
     std::uniform_int_distribution<int> uniform(0, N-1);
     
     std::vector<Particle> new_particles;
-    for (std::size_t i = 0; i < n1; i++)
+    for (std::size_t i = 0; i < n1; i++) {
         new_particles.push_back(particles[distribution(generator)]);
-    for (std::size_t i = 0; i < n2; i++)
+        new_particles[i].set_weight(1);
+    }
+    for (std::size_t i = 0; i < n2; i++) {
         new_particles.push_back(particles[uniform(generator)]);
+        new_particles[i].set_weight(1);
+    }
     
     particles = std::move(new_particles);
 }

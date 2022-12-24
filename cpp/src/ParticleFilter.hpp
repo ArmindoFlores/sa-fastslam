@@ -120,8 +120,9 @@ public:
         Report a landmark sighting to all particles and update them
 
         \param landmarks the vector of observed landmarks
+        \returns The number of matches landmarks
     */
-    void observe_landmarks(const std::vector<Landmark>& landmarks);
+    std::size_t observe_landmarks(const std::vector<Landmark>& landmarks);
     /*
         Perform resampling on the set of particles based on their weight
 
