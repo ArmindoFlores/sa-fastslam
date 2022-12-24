@@ -20,7 +20,7 @@ static constexpr std::size_t MAP_HEIGHT = 832;
 static constexpr std::size_t MAP_WIDTH = 832;
 static constexpr double MAP_RESOLUTION = 0.05;
 static constexpr std::size_t MAX_SUBSCRIBER_QUEUE_SIZE = 1000;
-static constexpr double RESAMPLE_PROPORTIONAL_FRACTION = 0.7;
+static constexpr double RESAMPLE_PROPORTIONAL_FRACTION = 0.9;
 
 // Smart pointer to the particle filter instance
 static std::unique_ptr<ParticleFilter> particle_filter = nullptr;
@@ -29,7 +29,7 @@ static std::mutex particle_filter_mtx;
 // The last pose the robot estimate through odometry
 static cv::Vec3d last_pose {0.0, 0.0, 0.0};
 // The empirical variance of odometry measurements
-static cv::Vec2d odom_variance {0.00001, 0.0005};
+static cv::Vec2d odom_variance {0.00001, 0.0003};
 // Inner map representation
 static std::vector<int8_t> best_map_estimate(MAP_HEIGHT * MAP_WIDTH);
 
@@ -74,6 +74,28 @@ geometry_msgs::Quaternion euler_angle_to_quaternion(double x, double y, double z
   return result;
 }
 
+double stddev(const std::vector<double>& v)
+{
+  double sum = std::accumulate(
+    v.begin(), 
+    v.end(), 
+    0.0, 
+    [](double acc, double element) { return element; }
+  );
+  double mean = sum / v.size();
+
+  std::vector<double> diff(v.size());
+  std::transform(
+    v.begin(), 
+    v.end(), 
+    diff.begin(),
+    [mean](double element) { return element - mean; }
+  );
+  double sq_sum = std::inner_product(diff.begin(), diff.end(), diff.begin(), 0.0);
+  double stddev = std::sqrt(sq_sum / v.size());
+  return stddev;
+}
+
 /*
   This function is called when an odometry reading is published to the "odom"
   topic. It updates the particle filter with this new information.
@@ -113,11 +135,19 @@ void scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
   start = ros::Time::now();
   auto extracted = extract_landmarks(points, ExtractionAlgorithm::RANSAC);
 
+
   std::vector<Particle> particles;
   {
     std::unique_lock<std::mutex> lck(particle_filter_mtx);
     // Update particle weights using extracted landmarks
-    particle_filter->observe_landmarks(extracted);
+    std::size_t matches = particle_filter->observe_landmarks(extracted);
+    particles = particle_filter->get_particles();
+
+    std::vector<double> weights(particles.size());
+    std::transform(particles.begin(), particles.end(), weights.begin(), [](const Particle& p){return p.get_weight();});
+    double stddeviation = stddev(weights);
+    ROS_INFO("Standard deviation: %.3f (%lu matches)", stddeviation, matches);
+    
     // Perform resampling
     particle_filter->resample(RESAMPLE_PROPORTIONAL_FRACTION);
     end = ros::Time::now();
