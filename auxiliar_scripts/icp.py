@@ -60,6 +60,9 @@ def icp(coordinates, noisy_coordinates):
             nearest_neighbor.append(possnearest_neighbor)
         nearest_neighbor = np.array(nearest_neighbor)
 
+        print(np.array(noisy_coordinates).shape)
+        print(noisy_coordinates[0])
+        print(np.array(nearest_neighbor).shape)
         sol = np.linalg.lstsq(noisy_coordinates, nearest_neighbor, rcond=None)[0]
         error = np.linalg.norm(noisy_coordinates - nearest_neighbor)
         sol_final = sol_final @ sol
