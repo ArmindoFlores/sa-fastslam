@@ -24,7 +24,7 @@ public:
         \param max_invalid_landmarks the maximum number of invalid landmarks to
         keep track of [NOT IMPLEMENTED!]
     */
-    LandmarkMatcher(const cv::Mat& Qt, int minimum_observations=6, double distance_threshold=0.3, int max_invalid_landmarks=-1);
+    LandmarkMatcher(const cv::Mat& Qt, int minimum_observations=6, double distance_threshold=0.5, int max_invalid_landmarks=-1);
     LandmarkMatcher(const LandmarkMatcher&);
     LandmarkMatcher(LandmarkMatcher&&);
     LandmarkMatcher& operator = (const LandmarkMatcher&);

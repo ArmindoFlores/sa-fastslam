@@ -67,6 +67,16 @@ public:
     double get_weight() const;
 
     /*
+        \return The particle's valid landmarks
+    */
+    std::vector<Landmark> get_landmarks() const;
+
+    /*
+        \return The particle's tracked landmarks
+    */
+    std::vector<Landmark> get_all_landmarks() const;
+
+    /*
         \return The particle's pose
     */
     const cv::Vec3d& get_pose() const;

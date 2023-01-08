@@ -19,4 +19,9 @@ cv::Vec2d polar_to_cartesian(const cv::Vec2d& pos);
 */
 cv::Vec2d polar_to_cartesian(double theta,  double r);
 
+/*
+    Equivalent to x1 % x2 in Python.
+*/
+double python_fmod(double x1, double x2);
+
 #endif

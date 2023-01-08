@@ -1,8 +1,9 @@
 #include "Landmark.hpp"
 
 #include <cmath>
+#include "Utils.hpp"
 
-Landmark::Landmark(double r, double theta) : r(r), theta(theta) {}
+Landmark::Landmark(double r, double theta) : r(python_fmod(r, 2*M_PI)), theta(theta) {}
 Landmark::Landmark(double a, double b, double c)
 {
     double a_squared = a * a, b_squared = b * b;
@@ -12,7 +13,8 @@ Landmark::Landmark(double a, double b, double c)
     else
         theta = std::atan2(-b / (a_squared + b_squared), -a / (a_squared + b_squared));
     
-    r = std::fmod(std::abs(c) / std::sqrt(a_squared + b_squared), 2 * M_PI);
+    r = std::abs(c) / std::sqrt(a_squared + b_squared);
+    theta = python_fmod(theta, 2*M_PI);
 }
 Landmark::Landmark(Landmark&& other)
 {
@@ -35,7 +37,11 @@ Landmark& Landmark::operator = (Landmark&& l)
 void Landmark::update_parameters(double r, double theta)
 {
     this->r = r;
-    this->theta = theta;
+    if (this->r < 0) {
+        this->r *= -1;
+        theta += M_PI;
+    }
+    this->theta = python_fmod(theta, 2*M_PI);
 }
 
 cv::Vec2d Landmark::get_parameters() const
@@ -53,7 +59,7 @@ cv::Vec2d Landmark::get_parameters(const cv::Vec3d& pose) const
         computed_params[0] *= -1;
         computed_params[1] += M_PI;
     }
-    computed_params[1] = std::fmod(computed_params[1], 2 * M_PI);
+    computed_params[1] = python_fmod(computed_params[1], 2 * M_PI);
     return computed_params;
 }
 

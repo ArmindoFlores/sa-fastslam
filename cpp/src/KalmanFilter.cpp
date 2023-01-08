@@ -1,4 +1,5 @@
 #include "KalmanFilter.hpp"
+#include "Utils.hpp"
 
 KalmanFilter::KalmanFilter(const Landmark& landmark, const cv::Mat& covariance, const cv::Mat& Qt)
     : landmark(landmark)
@@ -59,9 +60,10 @@ void KalmanFilter::update(const cv::Vec2d& measurement, const cv::Mat& H)
     auto Q = H * covariance * H_transposed + Qt;
     auto K = covariance * H_transposed * Q.inv();
     cv::Vec2d diff = measurement - prediction;
-    diff[1] = std::fmod(diff[1] + M_PI, M_PI * 2) - M_PI;
+    diff[1] = python_fmod(diff[1] + M_PI, M_PI * 2) - M_PI;
 
     cv::Mat new_parameters = K * diff;
+    new_parameters += prediction;
     landmark.update_parameters(new_parameters.at<double>(0, 0), new_parameters.at<double>(1, 0));
     covariance -= K * H * covariance;
 }

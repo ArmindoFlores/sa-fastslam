@@ -1,4 +1,4 @@
-CFLAGS = -std=c++17 -ggdb -Wall -pedantic
+CFLAGS = -std=c++17 -O3 -Wall -pedantic
 CFLAGS += `pkg-config --cflags opencv4`
 C = g++
 

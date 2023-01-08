@@ -1,18 +1,22 @@
 #include "ParticleFilter.hpp"
+#include <iostream>
 
 Particle::Particle(const cv::Mat& Qt, std::function<cv::Mat(double, double, double)> H, const cv::Vec3d& pose)
-    : weight(1.0)
+    : weight(0.0)
     , Qt(Qt)
     , h_func(H)
     , pose(pose)
     , landmark_matcher(Qt)
 {}
 Particle::Particle(const cv::Mat& Qt, std::function<cv::Mat(double, double, double)> H)
-    : Particle(Qt, H, {0.0, 0.0, 0.0})
+    : Particle(Qt, H, {1.0, 1.0, 0.0})
 {}
 Particle::Particle(const Particle& p)
     : Particle::Particle(p.Qt, p.h_func, p.pose)
-{}
+{
+    weight = p.weight;
+    landmark_matcher = p.landmark_matcher;
+}
 Particle::Particle(Particle&& p)
     : weight(p.weight)
     , landmark_matcher(std::move(p.landmark_matcher))
@@ -67,6 +71,22 @@ double Particle::get_weight() const
     return weight;
 }
 
+std::vector<Landmark> Particle::get_landmarks() const
+{
+    std::vector<Landmark> result;
+    for (auto&& particle : landmark_matcher.get_map())
+        result.push_back(particle);
+    return result;
+}
+
+std::vector<Landmark> Particle::get_all_landmarks() const
+{
+    std::vector<Landmark> result;
+    for (auto&& particle : landmark_matcher.get_full_map())
+        result.push_back(particle);
+    return result;
+}
+
 const cv::Vec3d& Particle::get_pose() const
 {
     return pose;
@@ -82,6 +102,8 @@ void Particle::weigh(const cv::Vec2d& measurement, const KalmanFilter& matched_l
     cv::Vec2d Z = measurement - z_predicted;
     cv::Mat Zt;
     cv::transpose(Z, Zt);
+    if (weight == 0)
+        weight = 1;
     weight *= std::exp(((cv::Mat) (-0.5 * Zt * Q.inv() * Z)).at<double>(0, 0)) / std::sqrt(cv::determinant(2 * M_PI * Q));
 }
 
@@ -132,7 +154,7 @@ void ParticleFilter::resample(std::size_t N, double frac)
     double total_weight = std::accumulate(particles.begin(), particles.end(), 0.0, [](double acc, const Particle& p){ return acc + p.get_weight(); });
     if (total_weight == 0 || std::isnan(total_weight)) {
         for (Particle& particle : particles)
-            particle.set_weight(1);
+            particle.set_weight(0);
         return;
     }
     std::vector<double> normalized_weights(particles.size());
@@ -143,11 +165,11 @@ void ParticleFilter::resample(std::size_t N, double frac)
     std::vector<Particle> new_particles;
     for (std::size_t i = 0; i < n1; i++) {
         new_particles.push_back(particles[distribution(generator)]);
-        new_particles[i].set_weight(1);
+        new_particles[i].set_weight(0);
     }
     for (std::size_t i = 0; i < n2; i++) {
         new_particles.push_back(particles[uniform(generator)]);
-        new_particles[i].set_weight(1);
+        new_particles[i+n1].set_weight(0);
     }
     
     particles = std::move(new_particles);

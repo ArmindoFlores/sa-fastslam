@@ -51,7 +51,6 @@ std::optional<KalmanFilter> LandmarkMatcher::observe(const Landmark& landmark, s
     double theta = params[1] + pose[2];
     Landmark worldspace_landmark {params[0] + pose[0] * std::cos(theta) + pose[1] * std::sin(theta), theta};
     cv::Vec2d new_params {worldspace_landmark.get_parameters()};
-
     cv::Vec2d position {worldspace_landmark.closest_point(pose[0], pose[1])};
 
     std::size_t closest = filters.max_size();
@@ -62,6 +61,7 @@ std::optional<KalmanFilter> LandmarkMatcher::observe(const Landmark& landmark, s
         auto pair = filters[i];
         cv::Vec2d position_diff {position - pair.first->get_landmark().closest_point(pose[0], pose[1])};
         double landmark_distance_squared = position_diff.dot(position_diff);
+
         if (landmark_distance_squared < threshold_distance_squared && (closest_distance < 0 || landmark_distance_squared < closest_distance)) {
             // Found possible match
             closest = i;
@@ -72,7 +72,7 @@ std::optional<KalmanFilter> LandmarkMatcher::observe(const Landmark& landmark, s
         // Found a match
         cv::Mat H {h_func(pose[0], pose[1], new_params[1])};
         filters[closest].first->update(new_params, H);
-        filters[closest] = std::make_pair(filters[closest].first, filters[closest].second+1);
+        filters[closest].second++;
         if (filters[closest].second >= (std::size_t) minimum_observations)
             match = *filters[closest].first;
     }
@@ -82,11 +82,19 @@ std::optional<KalmanFilter> LandmarkMatcher::observe(const Landmark& landmark, s
         cv::transpose(H_inv, H_inv_transposed);
 
         filters.emplace_back(std::make_shared<KalmanFilter>(
-            landmark,
+            worldspace_landmark,
             H_inv_transposed * Qt * H_inv,
             Qt
         ), 1);
     }
+    /*if (filters.size() > (std::size_t) max_invalid_landmarks) {
+        std::sort(filters.begin(), filters.end(), [](const std::pair<std::shared_ptr<KalmanFilter>, std::size_t> f1, const std::pair<std::shared_ptr<KalmanFilter>, std::size_t> f2){
+            return f1.second > f2.second;
+        });
+        std::size_t diff = filters.size() - max_invalid_landmarks;
+        for (std::size_t i = 0; i < diff; i++)
+            filters.pop_back();
+    }*/
 
     return match;
 }

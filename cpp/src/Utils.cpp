@@ -14,3 +14,16 @@ cv::Vec2d polar_to_cartesian(double theta, double r)
         return r * result;
     return 5000 * result;
 }
+
+int sgn(double val) {
+    return (0.0 < val) - (val < 0.0);
+}
+
+double python_fmod(double x1, double x2)
+{
+    double sign1 = sgn(x1);
+    double sign2 = sgn(x2);
+    if (sign1 == sign2)
+        return sign2 * std::fmod(sign1 * x1, sign2 * x2);
+    return x2 - sign2 * std::fmod(sign1 * x1, sign2 * x2);
+}
