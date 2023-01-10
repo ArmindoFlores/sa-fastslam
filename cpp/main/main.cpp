@@ -8,37 +8,7 @@
 #include "IterativeClosestPoint.hpp"
 #include "Utils.hpp"
 
-int main()
-{
-    double _Qt[] = {0.01, 0, 0, 0.003};
-    double _H[] = {1, 1.419638946328426, 0, 1};
-    double _covariance[] = {0.01, -0.01404438283438678, -0.01404438283438678, 0.02272446891988181};
 
-    cv::Mat Qt {2, 2, CV_64F, _Qt};
-    cv::Mat H {2, 2, CV_64F, _H};
-    cv::Mat H_transposed;
-    cv::transpose(H, H_transposed);
-    cv::Mat covariance {2, 2, CV_64F, _covariance};
-
-    std::cout << "Qt: " << std::endl;
-    std::cout << Qt << std::endl;
-
-    std::cout << "H: " << std::endl;
-    std::cout << H << std::endl;
-
-    std::cout << "H': " << std::endl;
-    std::cout << H_transposed << std::endl;
-
-    std::cout << "covariance: " << std::endl;
-    std::cout << covariance << std::endl;
-
-    auto Q = H * covariance * H_transposed + Qt;
-
-    std::cout << Q << std::endl;
-    std::cout << Q.inv() << std::endl;
-}
-
-/*
 int main()
 {
     std::default_random_engine generator;
@@ -87,4 +57,3 @@ int main()
     std::cout << result.b << std::endl;
 
 }
-*/

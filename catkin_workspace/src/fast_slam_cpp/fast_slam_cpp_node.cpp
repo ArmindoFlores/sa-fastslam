@@ -15,7 +15,6 @@
 
 #include "LandmarkExtractor.hpp"
 #include "ParticleFilter.hpp"
-#include "Utils.hpp"
 
 static constexpr std::size_t MAP_HEIGHT = 832;
 static constexpr std::size_t MAP_WIDTH = 832;
@@ -33,8 +32,6 @@ static cv::Vec3d last_pose {0.0, 0.0, 0.0};
 static cv::Vec2d odom_variance {0.00001, 0.0003};
 // Inner map representation
 static std::vector<int8_t> best_map_estimate(MAP_HEIGHT * MAP_WIDTH);
-
-static int resample_count = 0;
 
 static ros::Publisher map_publisher;
 static ros::Publisher map_metadata_publisher;
@@ -128,8 +125,6 @@ void odom_callback(const nav_msgs::Odometry::ConstPtr& msg)
 */
 void scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 {
-  resample_count++;
-
   // float -> double conversion
   std::vector<double> points;
   points.resize(msg->ranges.size());
@@ -140,10 +135,6 @@ void scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
   start = ros::Time::now();
   auto extracted = extract_landmarks(points, ExtractionAlgorithm::RANSAC);
 
-  std::cout << "Extracted:" << std::endl;
-  for (const auto& landmark : extracted) {
-    std::cout << landmark << std::endl;
-  }
 
   std::vector<Particle> particles;
   {
@@ -158,10 +149,7 @@ void scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     ROS_INFO("Standard deviation: %.3f (%lu matches)", stddeviation, matches);
     
     // Perform resampling
-    if (resample_count >= 5) {
-      particle_filter->resample(RESAMPLE_PROPORTIONAL_FRACTION);
-      resample_count = 0;
-    }
+    particle_filter->resample(RESAMPLE_PROPORTIONAL_FRACTION);
     end = ros::Time::now();
     particles = particle_filter->get_particles();
   }
@@ -173,11 +161,6 @@ void scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
   Particle best_particle = *std::max_element(particles.begin(), particles.end(), [](const Particle& p1, const Particle& p2){
     return p1.get_weight() < p2.get_weight();
   });
-
-  if (resample_count == 0) {
-    for (const auto& landmark : best_particle.get_all_landmarks())
-      std::cout << landmark << std::endl;
-  }
 
   for (std::size_t i = 0; i < points.size(); i++) {
     if (points[i] <= 0.001)

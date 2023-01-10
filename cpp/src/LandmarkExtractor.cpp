@@ -238,7 +238,7 @@ std::vector<Landmark> extract_landmarks(const std::vector<double>& points, Extra
     std::vector<double> r2;
     std::vector<Landmark> result;
     if (algo == ExtractionAlgorithm::RANSAC) {
-        std::vector<RANSACResult> ransac_lines = RANSAC(points, 150, 20, 0.02, 10, 6);
+        std::vector<RANSACResult> ransac_lines = RANSAC(points, 300, 22, 0.02, 10, 6);
         for (const auto& line : ransac_lines) {
             Landmark new_landmark {line.a, line.b, line.c};
             cv::Vec2d new_params = new_landmark.get_parameters();
