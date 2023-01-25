@@ -1,6 +1,7 @@
 import numpy as np
 import math
 import matplotlib.pyplot as plt
+import time
 
 
 def transformation(reading):
@@ -38,11 +39,13 @@ def icp(coordinates, noisy_coordinates):
     translation_vec = mc_noisy_coordinates - mc_coordinates
     noisy_coordinates = noisy_coordinates - translation_vec
 
-    error = np.inf
-    error_min = 1.1
+    error = 1e12
+    last_error = np.inf
     iteration = 0
     sol_final = np.eye(3)
-    while error > error_min and iteration < 20:
+    while error/last_error < 0.95 and iteration < 5:
+        last_error = error
+        iter_start = time.time()
 
         # plt.scatter([point[0] for point in coordinates], [point[1] for point in coordinates])
         # plt.scatter([point[0] for point in noisy_coordinates], [point[1] for point in noisy_coordinates])
@@ -50,15 +53,15 @@ def icp(coordinates, noisy_coordinates):
         # plt.pause(0.1)
         # plt.clf()
 
-        nearest_neighbor = []
-        for point in noisy_coordinates:
+        nearest_neighbor = np.zeros((len(noisy_coordinates), 3))
+        for i, point in enumerate(noisy_coordinates):
             distance = np.inf
             for neighbor in coordinates:
-                if np.linalg.norm(point - neighbor) < distance:
-                    distance = np.linalg.norm(point - neighbor)
+                d = np.sum(np.square(point - neighbor))
+                if d < distance:
+                    distance = d
                     possnearest_neighbor = neighbor
-            nearest_neighbor.append(possnearest_neighbor)
-        nearest_neighbor = np.array(nearest_neighbor)
+            nearest_neighbor[i] = possnearest_neighbor
 
         # print(np.array(noisy_coordinates).shape)
         # print(noisy_coordinates[0])
@@ -69,6 +72,8 @@ def icp(coordinates, noisy_coordinates):
 
         noisy_coordinates = [np.dot(point, sol) for point in noisy_coordinates]
         iteration += 1
+        # print("Iteration time:", time.time() - iter_start)
+        # print("Error:", error / last_error)
 
     return sol_final, translation_vec
 

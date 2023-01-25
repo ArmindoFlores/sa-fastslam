@@ -4,6 +4,9 @@ import time
 import landmark_extractor
 
 
+USE_NEAREST_NEIGHBOUR = False
+
+
 class KalmanFilter:
     def __init__(self, landmark, initial_covariance, Qt):
         self.landmark = landmark
@@ -53,14 +56,25 @@ class LandmarkMatcher:
         
         for i, (_, ekf) in enumerate(self._landmarks):
             glandmark = ekf.landmark
-            # Compute the distance between projections on both landmarks
-            ld = np.sum(np.square(p1 - glandmark.closest_point(*pose[:2])))
-            # rdiff = new_params[0] - glandmark.params()[0]
-            # tdiff = new_params[1] - glandmark.params()[1]
-            # tdiff = (tdiff + np.pi) % (np.pi * 2) - np.pi  # Wrap angles
-            # ld = np.sum(np.square([rdiff, tdiff]))
-            if ld < dsquared and (closest is None or ld < closest["difference"]):
-                closest = {"difference": ld, "filter": ekf}
+            if USE_NEAREST_NEIGHBOUR:
+                # Compute the distance between projections on both landmarks
+                ld = np.sum(np.square(p1 - glandmark.closest_point(*pose[:2])))
+                # rdiff = new_params[0] - glandmark.params()[0]
+                # tdiff = new_params[1] - glandmark.params()[1]
+                # tdiff = (tdiff + np.pi) % (np.pi * 2) - np.pi  # Wrap angles
+                # ld = np.sum(np.square([rdiff, tdiff]))
+                # print(f"distance criterion: {ld < dsquared}")
+                if ld < dsquared and (closest is None or ld < closest["difference"]):
+                    closest = {"difference": ld, "filter": ekf}
+            else:
+                H = H_func(*pose[:2], glandmark.params()[1])
+                Q = H @ekf.covariance @ H.T + self.Qt
+                Z = new_params - glandmark.params()
+                v = Z.T @ np.linalg.inv(Q) @ Z
+                # print(f"validity region criterion: {v < 1}")
+                if not USE_NEAREST_NEIGHBOUR and v < 400 and (closest is None or v < closest["difference"]):
+                    closest = {"difference": v, "filter": ekf}
+
         if closest is not None:
             # Found a match
             H = H_func(*pose[:2], new_params[1])

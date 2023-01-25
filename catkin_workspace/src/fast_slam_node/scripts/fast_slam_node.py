@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 import math
-import os
 import sys
 import threading
+import time
 
 import numpy as np
 import rospy
@@ -16,6 +16,7 @@ from landmark_matching import *
 from particle_filter import *
 
 
+one_particle_mode = False
 particle_lock = threading.Lock()
 
 
@@ -156,12 +157,16 @@ def odom_callback(data):
 
 def scan_callback(data):
     global bag_initial_time, total_missed, total
+    if not hasattr(scan_callback, "total_time"):
+        scan_callback.total_time = 0
+        scan_callback.ntimes = 0
+    scan_callback.ntimes += 1
 
     total += 1
     if bag_initial_time is None:
         bag_initial_time = rospy.Time.now().to_sec() - data.header.stamp.to_sec()
     
-    time = rospy.Time.now().to_sec() - bag_initial_time
+    timestamp = rospy.Time.now().to_sec() - bag_initial_time
     
     laser = {
         "header": {
@@ -181,16 +186,18 @@ def scan_callback(data):
     }
 
     # If the scan was a long time ago
-    if time - laser['header']['stamp'] > 0.2:
+    if timestamp - laser['header']['stamp'] > 0.2:
         total_missed += 1
         return
 
     #rospy.loginfo(f"Time difference: {time - laser['header']['stamp']} s")
     rospy.loginfo(f"Miss %: {round(total_missed/total * 100)}")
-
-    landmarks = extract_landmarks(laser, C=23, X=0.01, N=150)
+    start = time.time()
+    if not one_particle_mode:
+        # landmarks = extract_landmarks(laser, C=23, X=0.01, N=150)
+        landmarks = extract_landmarks_hough(laser)
     
-    if len(landmarks) != 0:
+    if not one_particle_mode and len(landmarks) != 0:
         total_matches, max_matches = pf.observe_landmarks(landmarks)
         rospy.loginfo(f"Seen: {len(landmarks)} Max Matches: {max_matches} Total Matches: {total_matches} ({round(total_matches / pf.N, 2)} per particle)")
 
@@ -198,12 +205,17 @@ def scan_callback(data):
     for particle in pf.particles:
         if particle.weight > best_particle.weight:
             best_particle = particle
-    rospy.loginfo(f"Total valid: {len(best_particle.landmark_matcher.landmarks)}")
 
     update_map(laser["ranges"], laser["angle_increment"], laser["angle_min"])
-    with particle_lock:
-        pf.resample(pf.N, 0.7)
+    if not one_particle_mode:
+        with particle_lock:
+            pf.resample(pf.N, 0.7)
 
+    end = time.time()
+    scan_callback.total_time += end - start
+
+    rospy.loginfo(f"Total valid: {len(best_particle.landmark_matcher.valid_landmarks)}")
+    rospy.loginfo(f"Average time: {scan_callback.total_time / scan_callback.ntimes}s")
     #update_map(laser["ranges"], laser["angle_increment"], laser["angle_min"])
     publish_map()
 
@@ -282,7 +294,8 @@ def main():
 
     global odom_covariance
     odom_covariance = np.array([0.00001, 0.00001, 0.0005])
-    # odom_covariance = np.array([0.0, 0.0, 0.0])
+    if one_particle_mode:
+        odom_covariance = np.array([0.0, 0.0, 0.0])
 
     global Qt
     Qt = np.array([[0.001, 0], [0, 0.0003]])
@@ -292,6 +305,8 @@ def main():
 
     global N_particles
     N_particles = 100
+    if one_particle_mode:
+        N_particles = 1
 
     global pf 
     pf = ParticleFilter(N_particles, Qt, H, minimum_observations=6, distance_threshold=0.5, max_invalid_landmarks=12)

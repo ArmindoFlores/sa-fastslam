@@ -1,6 +1,7 @@
 import math
 import random
 
+import cv2
 import numpy as np
 
 
@@ -88,6 +89,25 @@ def to_cartesian(theta, r):
         return r * np.array((math.cos(theta), math.sin(theta)))
     else:
         return 5000 * np.array((math.cos(theta), math.sin(theta)))
+
+def extract_landmarks_hough(ls):
+    cartesian = np.array([to_cartesian(ls["angle_min"] + i * ls["angle_increment"], r) for i, r in enumerate(ls["ranges"]) if r > 0.001])
+    results = cv2.HoughLinesPointSet(cartesian.reshape(-1, 1, 2).astype(np.float32), 5, 50, -5, 5, 0.12, 0, np.pi, np.pi / 40)
+    if results is None:
+        return []
+    landmarks = [Landmark(*params[0][1:]) for params in results]
+    result_landmarks = []
+    for landmark in landmarks:
+        lpos = landmark.closest_point(0, 0)
+        found = False
+        for other_landmark in result_landmarks:
+            if np.linalg.norm(lpos - other_landmark.closest_point(0, 0)) < 0.25:
+                found = True
+                break
+        if not found:
+            result_landmarks.append(landmark)
+    return result_landmarks
+
 
 def extract_features(ls, N=300, C=22, X=0.02, D=10, S=6):
     """Extract features from laser scan data `ls`. 

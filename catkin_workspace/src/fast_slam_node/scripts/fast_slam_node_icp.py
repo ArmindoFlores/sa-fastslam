@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 import math
-import os
 import sys
 import threading
+import time
 
 import numpy as np
 import rospy
@@ -17,6 +17,7 @@ from particle_filter import *
 from icp import icp
 
 
+one_particle_mode = False
 particle_lock = threading.Lock()
 
 
@@ -157,12 +158,16 @@ def odom_callback(data):
 
 def scan_callback(data):
     global bag_initial_time, total_missed, total, last_scan
+    if not hasattr(scan_callback, "total_time"):
+        scan_callback.total_time = 0
+        scan_callback.ntimes = 0
+    scan_callback.ntimes += 1
 
     total += 1
     if bag_initial_time is None:
         bag_initial_time = rospy.Time.now().to_sec() - data.header.stamp.to_sec()
     
-    time = rospy.Time.now().to_sec() - bag_initial_time
+    # time = rospy.Time.now().to_sec() - bag_initial_time
     
     laser = {
         "header": {
@@ -195,19 +200,25 @@ def scan_callback(data):
         if xy is not None:
             laser_cartesian.append([*xy, 1])
 
+    start = time.time()
     if last_scan is not None:
         rotmat, vec = icp(last_scan, laser_cartesian)
-        rot = max(-1, min(1, np.arccos(rotmat[0][0])))
-        print(rot, vec)
-        pose_estimate = np.array([*vec, rot])
+        # cosrot = (rotmat[0][0] + rotmat[1][1]) / 2
+        cosrot = rotmat[1][0]
+        rot = np.arctan2(rotmat[1][0], rotmat[0][0])
+        if abs(rot) > 0.35:
+            rot = 0.35 * (1 if rot > 0 else -1)
+        pose_estimate = np.array([vec[0], vec[1], -rot])
         with particle_lock:
             pf.sample_pose(pose_estimate, odom_covariance)
     
     last_scan = laser_cartesian
 
-    landmarks = extract_landmarks(laser, C=23, X=0.01, N=150)
+    if not one_particle_mode:
+        # landmarks = extract_landmarks(laser, C=23, X=0.01, N=150)
+        landmarks = extract_landmarks_hough(laser)
     
-    if len(landmarks) != 0:
+    if not one_particle_mode and len(landmarks) != 0 :
         total_matches, max_matches = pf.observe_landmarks(landmarks)
         rospy.loginfo(f"Seen: {len(landmarks)} Max Matches: {max_matches} Total Matches: {total_matches} ({round(total_matches / pf.N, 2)} per particle)")
 
@@ -215,13 +226,19 @@ def scan_callback(data):
     for particle in pf.particles:
         if particle.weight > best_particle.weight:
             best_particle = particle
-    rospy.loginfo(f"Total valid: {len(best_particle.landmark_matcher.landmarks)}")
 
     update_map(laser["ranges"], laser["angle_increment"], laser["angle_min"])
-    with particle_lock:
-        pf.resample(pf.N, 0.7)
+    if not one_particle_mode:
+        with particle_lock:
+            pf.resample(pf.N, 0.7)
+    
+    end = time.time()
+    scan_callback.total_time += end - start
 
-    #update_map(laser["ranges"], laser["angle_increment"], laser["angle_min"])
+    rospy.loginfo(f"Total valid: {len(best_particle.landmark_matcher.valid_landmarks)}")
+    rospy.loginfo(f"Average time: {scan_callback.total_time / scan_callback.ntimes}s")
+
+    # update_map(laser["ranges"], laser["angle_increment"], laser["angle_min"])
     publish_map()
 
 def update_map(ranges, angle_increment, min_angle):
@@ -298,8 +315,10 @@ def main():
     total_missed = 0
 
     global odom_covariance
-    odom_covariance = np.array([0.00001, 0.00001, 0.0005])
-    # odom_covariance = np.array([0.0, 0.0, 0.0])
+    # odom_covariance = np.array([0.005, 0.005, 0.008])
+    odom_covariance = np.array([0.001, 0.001, 0.002])
+    if one_particle_mode:
+        odom_covariance = np.array([0.000, 0.000, 0.000])
 
     global Qt
     Qt = np.array([[0.001, 0], [0, 0.0003]])
@@ -312,6 +331,8 @@ def main():
 
     global N_particles
     N_particles = 100
+    if one_particle_mode:
+        N_particles = 1
 
     global pf 
     pf = ParticleFilter(N_particles, Qt, H, minimum_observations=6, distance_threshold=0.5, max_invalid_landmarks=12)
