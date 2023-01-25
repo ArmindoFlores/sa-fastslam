@@ -3,7 +3,6 @@ import time
 
 import landmark_extractor
 
-
 USE_NEAREST_NEIGHBOUR = False
 
 
@@ -70,10 +69,10 @@ class LandmarkMatcher:
                 H = H_func(*pose[:2], glandmark.params()[1])
                 Q = H @ekf.covariance @ H.T + self.Qt
                 Z = new_params - glandmark.params()
-                v = Z.T @ np.linalg.inv(Q) @ Z
-                # print(f"validity region criterion: {v < 1}")
-                if not USE_NEAREST_NEIGHBOUR and v < 400 and (closest is None or v < closest["difference"]):
-                    closest = {"difference": v, "filter": ekf}
+                w = np.exp(-0.5 * Z.T @ np.linalg.inv(Q) @ Z) / np.sqrt(np.linalg.det(2 * np.pi * Q))
+                # print(f"weight: {w} {w > 0.5}")
+                if not USE_NEAREST_NEIGHBOUR and w > 0.5 and (closest is None or w > closest["difference"]):
+                    closest = {"difference": w, "filter": ekf}
 
         if closest is not None:
             # Found a match
@@ -83,7 +82,10 @@ class LandmarkMatcher:
             self._landmarks[i][0] = time.time()
             
             if closest["filter"].landmark.count >= self.minimum_observations:
-                match = closest["filter"]
+                if USE_NEAREST_NEIGHBOUR:
+                    match = closest["filter"]
+                else:
+                    match = closest
         else:
             cp = worldspace_landmark.copy()
             H_inv = np.linalg.inv(H_func(*pose[:2], new_params[1]))

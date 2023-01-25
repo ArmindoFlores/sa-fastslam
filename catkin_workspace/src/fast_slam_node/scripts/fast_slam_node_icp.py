@@ -215,15 +215,17 @@ def scan_callback(data):
     last_scan = laser_cartesian
 
     if not one_particle_mode:
-        # landmarks = extract_landmarks(laser, C=23, X=0.01, N=150)
-        landmarks = extract_landmarks_hough(laser)
+        landmarks = extract_landmarks(laser, C=23, X=0.01, N=150)
+        # landmarks = extract_landmarks_hough(laser)
     
     if not one_particle_mode and len(landmarks) != 0 :
         total_matches, max_matches = pf.observe_landmarks(landmarks)
         rospy.loginfo(f"Seen: {len(landmarks)} Max Matches: {max_matches} Total Matches: {total_matches} ({round(total_matches / pf.N, 2)} per particle)")
 
+    total_landmarks = 0
     best_particle = pf.particles[0]
     for particle in pf.particles:
+        total_landmarks += len(particle.landmark_matcher.landmarks)
         if particle.weight > best_particle.weight:
             best_particle = particle
 
@@ -233,7 +235,10 @@ def scan_callback(data):
             pf.resample(pf.N, 0.7)
     
     end = time.time()
-    scan_callback.total_time += end - start
+    if total_landmarks == 0:
+        scan_callback.ntimes -= 1
+    else:
+        scan_callback.total_time += (end - start) / total_landmarks
 
     rospy.loginfo(f"Total valid: {len(best_particle.landmark_matcher.valid_landmarks)}")
     rospy.loginfo(f"Average time: {scan_callback.total_time / scan_callback.ntimes}s")
