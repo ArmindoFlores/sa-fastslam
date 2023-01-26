@@ -160,6 +160,7 @@ def scan_callback(data):
     if not hasattr(scan_callback, "total_time"):
         scan_callback.total_time = 0
         scan_callback.ntimes = 0
+        scan_callback.times_without_matches = 0
     scan_callback.ntimes += 1
 
     total += 1
@@ -202,16 +203,34 @@ def scan_callback(data):
         rospy.loginfo(f"Seen: {len(landmarks)} Max Matches: {max_matches} Total Matches: {total_matches} ({round(total_matches / pf.N, 2)} per particle)")
 
     total_landmarks = 0
+    total_valid_landmarks = 0
     best_particle = pf.particles[0]
     for particle in pf.particles:
         total_landmarks += len(particle.landmark_matcher.landmarks)
+        total_valid_landmarks += len(particle.landmark_matcher.valid_landmarks)
         if particle.weight > best_particle.weight:
             best_particle = particle
+
+    if False and len(landmarks) != 0 and total_matches == 0 and total_valid_landmarks != 0:
+        scan_callback.times_without_matches += 1
+    else:
+        scan_callback.times_without_matches = 0
 
     update_map(laser["ranges"], laser["angle_increment"], laser["angle_min"])
     if not one_particle_mode:
         with particle_lock:
-            pf.resample(pf.N, 0.7)
+            if scan_callback.times_without_matches == 5:
+                pf.resample(2000, 0)
+                for particle in pf.particles:
+                    particle.pose = np.random.random(3)
+                    particle.pose[:-1] -= 0.5
+                    particle.pose[:-1] *= 2 * 20
+                    # particle.pose[2] *= 2 * np.pi
+                rospy.loginfo("Kidnapping detection")
+                scan_callback.times_without_matches = 0
+            else:
+                new_N = max(pf.N * 0.65, N_particles)
+                pf.resample(new_N, 0.7)
 
     end = time.time()
     if total_landmarks == 0:
@@ -314,7 +333,7 @@ def main():
         N_particles = 1
 
     global pf 
-    pf = ParticleFilter(N_particles, Qt, H, minimum_observations=6, distance_threshold=0.5, max_invalid_landmarks=12)
+    pf = ParticleFilter(N_particles, Qt, H, minimum_observations=10, distance_threshold=0.5, max_invalid_landmarks=12)
 
     global bag_initial_time 
     bag_initial_time = None

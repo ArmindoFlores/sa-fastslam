@@ -66,16 +66,18 @@ class LandmarkMatcher:
                 if ld < dsquared and (closest is None or ld < closest["difference"]):
                     closest = {"difference": ld, "filter": ekf}
             else:
-                H = H_func(*pose[:2], glandmark.params()[1])
-                Q = H @ekf.covariance @ H.T + self.Qt
-                Z = new_params - glandmark.params()
-                w = np.exp(-0.5 * Z.T @ np.linalg.inv(Q) @ Z) / np.sqrt(np.linalg.det(2 * np.pi * Q))
-                # print(f"weight: {w} {w > 0.5}")
-                if not USE_NEAREST_NEIGHBOUR and w > 0.5 and (closest is None or w > closest["difference"]):
+                H = H_func(*pose[:2], new_params[1])
+                Q = H @ ekf.covariance @ H.T + self.Qt
+                Z = glandmark.params(pose) - landmark.params()
+                Q_inv = np.linalg.inv(Q)
+                w = np.exp(-0.5 * Z.T @ Q_inv @ Z) / np.sqrt(np.linalg.det(2 * np.pi * Q))
+                # print(f"weight: {w} {w > 1}")
+                if not USE_NEAREST_NEIGHBOUR and w > 1e-12 and (closest is None or w > closest["difference"]):
                     closest = {"difference": w, "filter": ekf}
 
         if closest is not None:
             # Found a match
+
             H = H_func(*pose[:2], new_params[1])
             closest["filter"].update(new_params, H)
             closest["filter"].landmark.count += 1

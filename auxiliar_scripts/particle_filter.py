@@ -47,15 +47,17 @@ class Particle:
         `z_measured` - the observed position of the landmark
         `match` - matched landmark
         """
+        # if isinstance(match, dict):
+        #     self.weight *= match["difference"]
+        # else:
         if isinstance(match, dict):
-            self.weight *= match["difference"]
-        else:
-            landmark = match.landmark
-            z_predicted = landmark.params(self.pose)
-            H = self.H_func(*self.pose[:2], landmark.params()[1])
-            Q = H.dot(match.covariance).dot(H.T) + self.Qt
-            Z = z_measured - z_predicted
-            self.weight *= np.exp(-0.5 * Z.T.dot(np.linalg.inv(Q)).dot(Z)) / np.sqrt(np.linalg.det(2 * np.pi * Q))
+            match = match["filter"]
+        landmark = match.landmark
+        z_predicted = landmark.params(self.pose)
+        H = self.H_func(*self.pose[:2], landmark.params()[1])
+        Q = H.dot(match.covariance).dot(H.T) + self.Qt
+        Z = z_measured - z_predicted
+        self.weight *= np.exp(-0.5 * Z.T.dot(np.linalg.inv(Q)).dot(Z)) / np.sqrt(np.linalg.det(2 * np.pi * Q))
         
     def copy(self):
         new_particle = Particle(self.Qt.copy(), self.H_func, self.pose.copy())
